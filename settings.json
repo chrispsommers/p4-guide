@@ -1,0 +1,16 @@
+{
+    "username": "common",
+    "controller": "https://localhost:8080",
+    "ports": [
+        "localhost:5555",
+        "localhost:5556"
+    ],
+    "speed": "speed_1_gbps",
+    "line_rate": 10,
+    "mtu": 1600,
+    "promiscuous": true,
+    "timeout_seconds": 300,
+    "interval_seconds": 0.5,
+    "log_level": "info",
+    "dynamic_stats_output": true
+}

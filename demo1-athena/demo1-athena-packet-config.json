@@ -1,0 +1,114 @@
+{
+    "ports": [
+        {
+            "name": "port1",
+            "location": "localhost:5555"
+        },
+        {
+            "name": "port2",
+            "location": "localhost:5556"
+        }
+    ],
+    "layer1": [
+        {
+            "name": "l1",
+            "port_names": [
+                "port1", "port2"
+            ],
+            "speed": "speed_1_gbps"
+        }
+    ],
+    "captures": [
+        {
+            "name": "c1",
+            "port_names": ["port1"],
+            "enable":"true",
+            "format": "pcap"
+        },
+        {
+            "name": "c2",
+            "port_names": ["port2"],
+            "enable":"true",
+            "format": "pcap"
+        }
+    ],
+    "flows": [
+        {
+            "name": "f1",
+            "tx_rx": {
+                "choice": "port",
+                "port": {
+                    "tx_name": "port1",
+                    "rx_name": "port2"
+                }
+            },
+            "size": {
+                "choice": "fixed",
+                "fixed": 100
+            },
+            "rate": {
+                "choice": "percentage",
+                "percentage": 10
+            },
+            "duration": {
+                "choice": "fixed_packets",
+                "fixed_packets": {
+                    "packets": 1
+                }
+            },
+            "packet": [
+                {
+                    "choice": "ethernet",
+                    "ethernet": {
+                        "dst": {
+                            "choice": "value",
+                            "value": "ee:30:ca:9d:1e:00"
+                        },
+                        "src": {
+                            "choice": "value",
+                            "value": "ee:cd:00:7e:70:00"
+                        }
+                    }
+                },
+                {
+                    "choice": "ipv4",
+                    "ipv4": {
+                        "src": {
+                            "choice": "value",
+                            "value": "192.168.0.1"
+                        },
+                        "dst": {
+                            "choice": "value",
+                            "value": "10.1.0.1"
+                        },
+                        "ttl": {
+                            "choice": "value",
+                            "value": 64
+                        }
+                    }
+                },
+                {
+                    "choice": "tcp",
+                    "tcp": {
+                        "src_port": {
+                            "choice": "value",
+                            "value": 1234
+                        },
+                        "dst_port": {
+                            "choice": "value",
+                            "value": 80
+                        }
+                    }
+                },
+                
+
+                {
+                    "choice": "custom",
+                    "custom": {
+                        "bytes": "00112233445566778899AABBCCDDEEFF"
+                    }
+                }
+            ]
+        }
+    ]
+}

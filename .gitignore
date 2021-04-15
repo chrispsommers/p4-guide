@@ -1,0 +1,17 @@
+bin/PI/
+bin/behavioral-model/
+bin/grpc/
+bin/install-details/
+bin/mininet/
+bin/p4c/
+bin/p4setup.bash
+bin/p4setup.csh
+bin/protobuf/
+bin/ptf/
+graphs/
+*/__pycache__/*
+ss-log.txt
+cmds-p4runtime.txt
+ptf.pcap
+ptf.log
+athena.pcap
