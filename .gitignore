@@ -15,3 +15,6 @@ cmds-p4runtime.txt
 ptf.pcap
 ptf.log
 athena.pcap
+*.p4_16.p4rt.txt
+*.p4_16.json
+*.p4_16.p4i
