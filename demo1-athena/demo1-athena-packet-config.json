@@ -99,14 +99,6 @@
                             "value": 80
                         }
                     }
-                },
-                
-
-                {
-                    "choice": "custom",
-                    "custom": {
-                        "bytes": "00112233445566778899AABBCCDDEEFF"
-                    }
                 }
             ]
         }

@@ -9,7 +9,7 @@ bin/p4setup.csh
 bin/protobuf/
 bin/ptf/
 graphs/
-*/__pycache__/*
+**/__pycache__/
 ss-log.txt
 cmds-p4runtime.txt
 ptf.pcap

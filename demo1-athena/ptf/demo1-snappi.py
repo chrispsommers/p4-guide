@@ -30,7 +30,10 @@ import snappi
 import utils
 import dpkt, sys
 
-# from utils.common import *
+# Ixia packets
+sys.path.append(os.path.join(os.path.dirname(__file__), '', 'scapy_contrib'))
+from ixia_scapy import * 
+from pktUtils import * 
 
 logger = logging.getLogger(None)
 ch = logging.StreamHandler()
@@ -255,12 +258,15 @@ class ConfigTest(Demo1Test):
         self.cfg = utils.common.load_test_config(
             self.api, 'demo1-athena-packet-config.json', apply_settings=True
         )
+        res = self.api.set_config(self.cfg)
+        assert len(res.errors) == 0, str(res.errors)
 
     @bt.autocleanup
     def runTest(self):
         in_dmac = 'ee:30:ca:9d:1e:00'
         in_smac = 'ee:cd:00:7e:70:00'
         ip_dst_addr = '10.1.0.1'
+        ip_src_addr='192.168.0.1'
         ig_port = 1
 
         eg_port = 2
@@ -322,36 +328,60 @@ class ConfigTest(Demo1Test):
                     raw = [ ord(b) for b in pkt]
                 else:
                     raw = list(pkt)
-
                 cap_dict[name].append(raw)
 
-                # print ("Capture bytes = %s" % raw)
-                # Parse/print layers with scapy
-                # Ether(bytes(raw)).show(0)
-                Ether(bytes(pkt)).show(0)
+        brx = bytes(cap_dict['port2'][-1])
+        rx_pkt = Ether(brx)
 
-        p_rx = bytes(cap_dict['port2'][-1])
-        exp_pkt = tu.simple_tcp_packet(eth_src=out_smac, eth_dst=out_dmac,
-                                ip_dst=ip_dst_addr, ip_ttl=63)
+        # exp_pkt = tu.simple_tcp_packet(eth_src=out_smac, eth_dst=out_dmac,
+        #                         ip_dst=ip_dst_addr, ip_ttl=63)
 
-        brx = bytes(p_rx)
-        bex=bytes(exp_pkt)
-        if brx != bex:
-            rxl=len(p_rx)
-            exl=len(exp_pkt)
+        # make the expected packet 4 bytes shorter to make the effective IP lengths equal. Athena will shorten by 4 bytes to account for added CRC.
+        # The 4 pad bytes aren't added to the ip len field by scapy
+        exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
+                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
+        # Force field updates (chksums, len, etc.)
+        exp_pkt = Ether(exp_pkt.build())
+
+        # bex=bytes(exp_pkt)
+
+        (equal, reason, p1,p2) = compare_pkts2(exp_pkt, rx_pkt,
+                                        # no_payload=True,
+                                        no_ip_chksum=True,
+                                        no_tcp_chksum=True,
+                                        no_tstamp=True)
+
+        if equal:
+            print ("Compare=%s: %s" % (equal, reason))
+            print("\nExpected (masked):\n===============")
+            p1.show()
+
+            print("\nReceived (masked):\n===============")
+            p2.show()
+        else:
+            print ("Mismatched %s" % ( reason))
+            print("\nExpected (masked):\n===============")
+            p1.show()
+
+            print("\nReceived (masked):\n===============")
+            p2.show()
+
+            exl=len(p1)
+            bex=bytes(p1)
+            rxl=len(p2)
+            brx=bytes(p2)
             maxlen= rxl if rxl>exl else exl
-
-            print("\nExpected:\n===============")
-            Ether(bex).show()
-
-            print("\nReceived:\n===============")
-            Ether(brx).show()
 
             print ("offset\t Exp \t Eq?\t Rx\n")
             for i in range(maxlen):
-                print ("[%d]\t %s\t %s\t %s" % (i, bex[i] if i<exl else "--", "==" if brx[i]==bex[i] else "!=", brx[i] if i <rxl else "--") )
+                if i < exl and i < rxl:
+                    print ("[%d]\t %02x\t %s\t %02x" % (i, bex[i], "==" if brx[i]==bex[i] else "!=", brx[i]) )
+                elif i < exl:
+                    print ("[%d]\t %02x\t %s\t %s" % (i, bex[i], "!=", "--") )
+                else:
+                    print ("[%d]\t %s\t %s\t %02x" % (i, "--", "!=", brx[i]) )
 
-            assert bytes(p_rx) == bytes(exp_pkt), "Rx %s != expected %s" % (bytes(p_rx), bytes(exp_pkt))
+            assert equal, "Rx %s != expected %s" % (brx, bex)
 
             
             

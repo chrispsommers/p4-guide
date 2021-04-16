@@ -1,16 +1,3 @@
-import sys
-import copy
-import logging
-import types
-import time
-import re
-
-import ptf
-import ptf.dataplane
-import ptf.parse
-import ptf.ptfutils
-from ptf.testutils import *
-from ptf.thriftutils import *
 import ptf.packet as scapy
 from ixia_scapy import *
 # Some useful defines
@@ -18,35 +5,11 @@ IP_ETHERTYPE = 0x800
 TCP_PROTOCOL = 0x6
 UDP_PROTOCOL = 0x11
 MINSIZE = 0
-# Default floating signature byes in groups of 4
+# Default floating signature bytes in groups of 4
 SIGNATURE1=0x87736749
 SIGNATURE2=0x42871180
 SIGNATURE3=0x08711805
 ETH_ONLY_ETHERTYPE=0xffff
-
-def int_to_bytes(value, length):
-    result = []
-
-    for i in range(0, length):
-        result.append(value >> (i * 8) & 0xff)
-    result.reverse()
-    return result
-
-def i16_to_bytes(value):
-    return int_to_bytes(value,2)
-  
-def i32_to_bytes(value):
-    return int_to_bytes(value,4)
-
-def Raw_i32(value):
-    return Raw(bytes_to_string(i32_to_bytes(value)))
-
-def Raw_i16(value):
-    return Raw(bytes_to_string(i16_to_bytes(value)))
-
-
-def pad(val=0,size=0):
-    return ("".join([chr(val) for x in range(size)]))
 
 def ip_make_tos(tos, ecn, dscp):
     if ecn is not None:
@@ -60,100 +23,37 @@ def ip_make_tos(tos, ecn, dscp):
 def pkt_layers(p):
     # https://stackoverflow.com/questions/13549294/get-all-the-layers-in-a-packet
     layers = []
-    counter = 0
+    layer_num = 0
     while True:
-        layer =p.getlayer(counter)
+        layer =p.getlayer(layer_num)
         if (layer != None):
             layers.append(layer.name)
         else:
             break
-        counter += 1
+        layer_num += 1
     return layers
 
 def pkt_layers_str(p):
     return ":".join(pkt_layers(p))
-    
-def verify_multiple_packets(test, port, pkts=[], pkt_lens=[], device_number=0, tmo=None, slack=0):
-
-    """
-    Checks for packets on a specific port, and compares them to a list of packets provided
-    by the user. This is useful where the order of the packet arrival is unknown
-    For e.g., if the ingress ports are different
-    """
-
-
-    rx_pkt_status = [False] * len(pkts)
-    if tmo is None:
-        tmo = ptf.ptfutils.default_negative_timeout
-    rx_pkts = 0
-    while rx_pkts < len(pkts):
-        (rcv_device, rcv_port, rcv_pkt, pkt_time) = dp_poll(
-                test,
-                device_number=device_number,
-                port_number=port,
-                timeout=tmo)
-        if not rcv_pkt:
-            if slack:
-                test.assertTrue((slack > (len(pkts) - rx_pkts)), "Timeout:Port[%d]:Got:[%d]:Allowed slack[%d]:Left[%d]\n" %(port, rx_pkts, slack, len(pkts)-rx_pkts))
-                return
-            else:
-                print "No more packets but still expecting", len(pkts)-rx_pkts
-                sys.stdout.flush()
-                for i, a_pkt in enumerate(pkts):
-                    #print rx_pkt_status[i]
-                    #print format_packet(a_pkt)
-                    if not rx_pkt_status[i]:
-                        print format_packet(a_pkt)
-                sys.stdout.flush()
-                test.assertTrue(False, "Timeout:Port:[%d]:Got[%d]:Left[%d]\n" %(port,rx_pkts,len(pkts)-rx_pkts))
-                return
-
-        rx_pkts = rx_pkts + 1
-        found = False
-        for i, a_pkt in enumerate(pkts):
-            if str(a_pkt) == str(rcv_pkt[:pkt_lens[i]]) and not rx_pkt_status[i]:
-                rx_pkt_status[i] = True
-                found = True
-                break
-        if not found:
-            test.assertTrue(False, "RxPort:[%u]:Pkt#[%u]:Pkt:%s:Unmatched\n" %(port, rx_pkts, ":".join("{:02x}".format(ord(c)) for c in rcv_pkt[:pkt_lens[0]])))
 
 ########################### IXIA Packet Types ##############################################
 
-pkt_types = {
-    'ixeth':'ixia_eth_packet_fixed_instrum',
-    'ixip':'ixia_ip_packet_fixed_instrum',
-    'ixudp':'ixia_udp_packet_fixed_instrum',
-    'ixtcp':'ixia_tcp_packet_fixed_instrum',
-
-    'ixethf':'ixia_eth_packet_floating_instrum',
-    'ixipf':'ixia_ip_packet_floating_instrum',
-    'ixudpf':'ixia_udp_packet_floating_instrum',
-    'ixtcpf':'ixia_tcp_packet_floating_instrum',
-}
-
-def map_test_packet_type(nickname):
-    if nickname in pkt_types.keys():
-        return pkt_types[nickname]
+def fill_payload(pkt, pktlen, payload_pattern='zeroes'):
+    if payload_pattern == 'increment':
+        pkt = pkt/("".join([chr(x % 256) for x in range(pktlen - len(pkt))]))
+    elif payload_pattern == 'zeroes':
+        pkt = pkt/("".join([chr(0) for x in range(pktlen - len(pkt))]))
     else:
-        print "ERROR - packet nickname '%s' unknown" % nickname
-        print "KNOWN TYPES:", pkt_types
-        return None
-
-def make_test_packet(packet_type, pipe=None, app=None, **kwargs):
-    # TODO - type per app[]
-    return eval (packet_type)(**kwargs)
+        pkt = pkt/("".join([chr(0) for x in range(pktlen - len(pkt))]))
+    return pkt
 
 def ixia_tcp_packet_floating_instrum(
                         _sig1=SIGNATURE1,
                         _sig2=SIGNATURE2,
                         _sig3=SIGNATURE3,
-                        _sig_offset=0,
                         _pgid=0,
                         _tstamp=0,
                         _seqnum=0,
-                        has_fake_ig_tstamp=False,
-                        fake_ig_tstamp=0, 
                         pktlen=100,
                         eth_dst='00:01:02:03:04:05',
                         eth_src='de:ad:be:ef:ba:be',
@@ -167,17 +67,19 @@ def ixia_tcp_packet_floating_instrum(
                         ip_ecn=None,
                         ip_dscp=None,
                         ip_ttl=64,
-                        ip_id=0x0001,
+                        ip_id=0,
                         ip_frag=0,
                         tcp_sport=1234,
                         tcp_dport=80,
-                        tcp_flags="S",
+                        tcp_flags=0,
                         ip_ihl=None,
                         ip_options=False,
-                        with_tcp_chksum=True
+                        with_tcp_chksum=True,
+                        tcp_window=8192,
+                        payload_pattern='zeroes'
                       ):
     """
-    Return a simple dataplane TCP packet
+    Return a simple dataplane TCP packet with IXIA_FIXED_INSTRUM header following TCP 
 
     Supports a few parameters:
     @param len Length of packet in bytes w/o CRC
@@ -197,8 +99,9 @@ def ixia_tcp_packet_floating_instrum(
     @param tcp_sport TCP source port
     @param tcp_flags TCP Control flags
     @param with_tcp_chksum Valid TCP checksum
+    @param payload_pattern 'zeroes','increment'
 
-    Generates a simple TCP request.  Users
+    Generates a simple TCP packet. Users
     shouldn't assume anything about this packet other than that
     it is a valid ethernet/IP/TCP frame.
     """
@@ -207,9 +110,9 @@ def ixia_tcp_packet_floating_instrum(
         pktlen = MINSIZE
 
     if with_tcp_chksum:
-        tcp_hdr = scapy.TCP(sport=tcp_sport, dport=tcp_dport, flags=tcp_flags)
+        tcp_hdr = scapy.TCP(sport=tcp_sport, dport=tcp_dport, flags=tcp_flags, window=tcp_window)
     else:
-        tcp_hdr = scapy.TCP(sport=tcp_sport, dport=tcp_dport, flags=tcp_flags, chksum=0)
+        tcp_hdr = scapy.TCP(sport=tcp_sport, dport=tcp_dport, flags=tcp_flags, window=tcp_window, chksum=0)
 
     ip_tos = ip_make_tos(ip_tos, ip_ecn, ip_dscp)
 
@@ -231,20 +134,17 @@ def ixia_tcp_packet_floating_instrum(
     instrum_frag = IXIA_FLOAT_INSTRUM(signature1=_sig1, signature2=_sig2, signature3=_sig3,
                         pgid=_pgid, tstamp=_tstamp, seqnum=_seqnum)
     pkt = pkt / instrum_frag
-    pkt = pkt/("".join([chr(x % 256) for x in xrange(pktlen - len(pkt))]))
+    fill_payload(pkt, pktlen, payload_pattern)
+    return fill_payload(pkt, pktlen, payload_pattern)
 
-    return pkt
 
 def ixia_udp_packet_floating_instrum(
                         _sig1=SIGNATURE1,
                         _sig2=SIGNATURE2,
                         _sig3=SIGNATURE3,
-                        _sig_offset=0,
                         _pgid=0,
                         _tstamp=0,
                         _seqnum=0,
-                        has_fake_ig_tstamp=False,
-                        fake_ig_tstamp=0, 
                         pktlen=100,
                         eth_dst='00:01:02:03:04:05',
                         eth_src='de:ad:be:ef:ba:be',
@@ -263,7 +163,7 @@ def ixia_udp_packet_floating_instrum(
                         ip_ihl=None,
                         ip_options=False,
                         ip_flag=0,
-                        ip_id=1,
+                        ip_id=0,
                         with_udp_chksum=True,
                         udp_payload=None
                       ):
@@ -327,7 +227,7 @@ def ixia_udp_packet_floating_instrum(
     if udp_payload:
         pkt = pkt/udp_payload
 
-    pkt = pkt/("".join([chr(x % 256) for x in xrange(pktlen - len(pkt))]))
+    pkt = pkt/("".join([chr(x % 256) for x in range(pktlen - len(pkt))]))
     if len(pkt) > pktlen:
         print ("WARNING: Minimum packet type '%s' has len=%d; this exceeds requested pktlen=%d" %
          ("ixia_udp_packet_floating_instrum", len(pkt), pktlen))
@@ -337,13 +237,10 @@ def ixia_eth_packet_floating_instrum(
                     _sig1=SIGNATURE1,
                     _sig2=SIGNATURE2,
                     _sig3=SIGNATURE3,
-                    _sig_offset=0,
                     _pgid=0,
                     _tstamp=0,
                     _seqnum=0,
-                    has_fake_ig_tstamp=False,
-                    fake_ig_tstamp=0, 
-                    pktlen=60,
+                    pktlen=100,
                     eth_dst='00:01:02:03:04:05',
                     eth_src='de:ad:be:ef:ba:be',
                     eth_type=ETH_ONLY_ETHERTYPE
@@ -358,7 +255,7 @@ def ixia_eth_packet_floating_instrum(
                         pgid=_pgid, tstamp=_tstamp, seqnum=_seqnum)
     pkt = pkt / instrum_frag
 
-    pkt = pkt/("".join([chr(x % 256) for x in xrange(pktlen - len(pkt))]))
+    pkt = pkt/("".join([chr(x % 256) for x in range(pktlen - len(pkt))]))
 
     return pkt
 
@@ -366,12 +263,9 @@ def ixia_ip_packet_floating_instrum(
                         _sig1=SIGNATURE1,
                         _sig2=SIGNATURE2,
                         _sig3=SIGNATURE3,
-                        _sig_offset=0,
                         _pgid=0,
                         _tstamp=0,
                         _seqnum=0,
-                        has_fake_ig_tstamp=False,
-                        fake_ig_tstamp=0, 
                         pktlen=100,
                         eth_dst='00:01:02:03:04:05',
                         eth_src='de:ad:be:ef:ba:be',
@@ -385,7 +279,7 @@ def ixia_ip_packet_floating_instrum(
                         ip_ecn=None,
                         ip_dscp=None,
                         ip_ttl=64,
-                        ip_id=0x0001,
+                        ip_id=0,
                         ip_ihl=None,
                         ip_options=False,
                         ip_proto=0
@@ -436,18 +330,15 @@ def ixia_ip_packet_floating_instrum(
                         pgid=_pgid, tstamp=_tstamp, seqnum=_seqnum)
     pkt = pkt / instrum_frag
 
-    pkt = pkt/("".join([chr(x % 256) for x in xrange(pktlen - len(pkt))]))
+    pkt = pkt/("".join([chr(x % 256) for x in range(pktlen - len(pkt))]))
 
     return pkt
 
 def ixia_tcp_packet_fixed_instrum(
                         _sig=SIGNATURE1,
-                        _sig_offset=0,
                         _pgid=0,
                         _tstamp=0,
                         _seqnum=0,
-                        has_fake_ig_tstamp=False,
-                        fake_ig_tstamp=0, 
                         pktlen=100,
                         eth_dst='00:01:02:03:04:05',
                         eth_src='de:ad:be:ef:ba:be',
@@ -461,11 +352,11 @@ def ixia_tcp_packet_fixed_instrum(
                         ip_ecn=None,
                         ip_dscp=None,
                         ip_ttl=64,
-                        ip_id=0x0001,
+                        ip_id=0,
                         ip_frag=0,
                         tcp_sport=1234,
                         tcp_dport=80,
-                        tcp_flags="S",
+                        tcp_flags=0,
                         ip_ihl=None,
                         ip_options=False,
                         with_tcp_chksum=True
@@ -525,18 +416,15 @@ def ixia_tcp_packet_fixed_instrum(
     instrum_frag = IXIA_FIXED_INSTRUM(signature=_sig,
                         pgid=_pgid, tstamp=_tstamp, seqnum=_seqnum)
     pkt = pkt / instrum_frag
-    pkt = pkt/("".join([chr(x % 256) for x in xrange(pktlen - len(pkt))]))
+    pkt = pkt/("".join([chr(x % 256) for x in range(pktlen - len(pkt))]))
 
     return pkt
 
 def ixia_udp_packet_fixed_instrum(
                         _sig=SIGNATURE1,
-                        _sig_offset=0,
                         _pgid=0,
                         _tstamp=0,
                         _seqnum=0,
-                        has_fake_ig_tstamp=False,
-                        fake_ig_tstamp=0, 
                         pktlen=100,
                         eth_dst='00:01:02:03:04:05',
                         eth_src='de:ad:be:ef:ba:be',
@@ -555,7 +443,7 @@ def ixia_udp_packet_fixed_instrum(
                         ip_ihl=None,
                         ip_options=False,
                         ip_flag=0,
-                        ip_id=1,
+                        ip_id=0,
                         with_udp_chksum=True,
                         udp_payload=None
                       ):
@@ -619,7 +507,7 @@ def ixia_udp_packet_fixed_instrum(
     if udp_payload:
         pkt = pkt/udp_payload
 
-    pkt = pkt/("".join([chr(x % 256) for x in xrange(pktlen - len(pkt))]))
+    pkt = pkt/("".join([chr(x % 256) for x in range(pktlen - len(pkt))]))
     if len(pkt) > pktlen:
         print ("WARNING: Minimum packet type '%s' has len=%d; this exceeds requested pktlen=%d" %
          ("ixia_udp_packet_fixed_instrum", len(pkt), pktlen))
@@ -627,13 +515,10 @@ def ixia_udp_packet_fixed_instrum(
 
 def ixia_eth_packet_fixed_instrum(
                     _sig=SIGNATURE1,
-                    _sig_offset=0,
                     _pgid=0,
                     _tstamp=0,
                     _seqnum=0,
-                    has_fake_ig_tstamp=False,
-                    fake_ig_tstamp=0, 
-                    pktlen=60,
+                    pktlen=100,
                     eth_dst='00:01:02:03:04:05',
                     eth_src='de:ad:be:ef:ba:be',
                     eth_type=ETH_ONLY_ETHERTYPE
@@ -648,13 +533,12 @@ def ixia_eth_packet_fixed_instrum(
                         pgid=_pgid, tstamp=_tstamp, seqnum=_seqnum)
     pkt = pkt / instrum_frag
 
-    pkt = pkt/("".join([chr(x % 256) for x in xrange(pktlen - len(pkt))]))
+    pkt = pkt/("".join([chr(x % 256) for x in range(pktlen - len(pkt))]))
 
     return pkt
 
 def ixia_ip_packet_fixed_instrum(
                         _sig=SIGNATURE1,
-                        _sig_offset=0,
                         _pgid=0,
                         _tstamp=0,
                         _seqnum=0,
@@ -673,7 +557,7 @@ def ixia_ip_packet_fixed_instrum(
                         ip_ecn=None,
                         ip_dscp=None,
                         ip_ttl=64,
-                        ip_id=0x0001,
+                        ip_id=0,
                         ip_ihl=None,
                         ip_options=False,
                         ip_proto=0
@@ -724,10 +608,174 @@ def ixia_ip_packet_fixed_instrum(
                         pgid=_pgid, tstamp=_tstamp, seqnum=_seqnum)
     pkt = pkt / instrum_frag
 
-    pkt = pkt/("".join([chr(x % 256) for x in xrange(pktlen - len(pkt))]))
+    pkt = pkt/("".join([chr(x % 256) for x in range(pktlen - len(pkt))]))
     if len(pkt) > pktlen:
         print ("WARNING: Minimum packet type '%s' has len=%d; this exceeds requested pktlen=%d" %
          ("ixia_ip_packet_fixed_instrum", len(pkt), pktlen))
 
     return pkt
 
+
+def compare_pkts(pkt1, pkt2):
+    """ Compare two packets, optionally skipping some parts
+        TODO - replace with general iteration through layers
+    """
+    if len(pkt1) != len(pkt2):
+        return False, 'unequal len'
+
+    l='Ether'
+    print ("pkt1= %s\npkt2=%s" % (str(pkt1),str(pkt2)))
+    if pkt1.haslayer(l) or pkt2.haslayer(l):
+        if not pkt1.haslayer(l):
+            return False, "pkt1 missing %s layer" % l
+        if not pkt2.haslayer(l):
+            return False, "pkt2 missing %s layer" % l
+
+        p1=pkt1[l].copy()
+        p2=pkt2[l].copy()
+        p1.remove_payload()
+        p2.remove_payload()
+        if str(p1) != str(p2):
+            return False, "Mismatched %s layers: %s != %s" % (l, str(p1),str(p2))
+        else:
+            print ("Matched %s layers: %s == %s" % (l, str(p1),str(p2)))
+
+    l='IP'
+    if pkt1.haslayer(l) or pkt2.haslayer(l):
+        if not pkt1.haslayer(l):
+            return False, "pkt1 missing %s layer" % l
+        if not pkt2.haslayer(l):
+            return False, "pkt2 missing %s layer" % l
+
+        p1=pkt1[l].copy()
+        p2=pkt2[l].copy()
+        p1.remove_payload()
+        p2.remove_payload()
+        if str(p1) != str(p2):
+            return False, "Mismatched %s layers: %s != %s" % (l, str(p1),str(p2))
+        else:
+            print ("Matched %s layers: %s == %s" % (l, str(p1),str(p2)))
+
+
+    l='TCP'
+    if pkt1.haslayer(l) or pkt2.haslayer(l):
+        if not pkt1.haslayer(l):
+            return False, "pkt1 missing %s layer" % l
+        if not pkt2.haslayer(l):
+            return False, "pkt2 missing %s layer" % l
+
+        p1=pkt1[l].copy()
+        p2=pkt2[l].copy()
+        p1.remove_payload()
+        p2.remove_payload()
+        if str(p1) != str(p2):
+            return False, "Mismatched %s layers: %s != %s" % (l, str(p1),str(p2))
+        else:
+            print ("Matched %s layers: %s == %s" % (l, str(p1),str(p2)))
+
+    return True,""
+
+
+def compare_headers(pkt1, pkt2):
+    """ Compare two packets, ignoring padding and raw
+        returns (bool, string) where bool = True if same, false otherwise; string explains first reason to fail
+    """
+    if len(pkt1) != len(pkt2):
+        return False, 'unequal len'
+
+    # https://stackoverflow.com/questions/13549294/get-all-the-layers-in-a-packet
+    layer_num = 0
+    while True:
+        l1 =pkt1.getlayer(layer_num)
+        l2 =pkt2.getlayer(layer_num)
+        if l1 is None and l2 is None:
+            return True, ''
+        if l1 is None:
+            return False, "pk1 missing %s" % l2.name
+        elif l2 is None:
+            return False, "pk2 missing %s" % l1.name
+        
+        if (l1.name == 'Raw' or l1.name == 'Padding') and (l2.name == 'Raw' or l2.name == 'Padding'):
+            return True, ''
+
+        if l1.name != l2.name:
+            return False, "Layer %d unequal: pkt1 has %s, pkt2 has %s" % (layer_num, l1.name, l2.name)
+
+        layer_num += 1
+
+
+def compare_pkts2(pkt1, pkt2,
+                no_ip_chksum=False,
+                no_tcp_chksum=False,
+                no_payload=False,
+                no_tstamp=False):
+    """ Compare two packets, optionally skipping some parts
+        returne bool, string, masked pkt1, masked pkt2
+        where bool = True if masked packets match,
+        string = reason for mismatch,
+        masked pkt1, masked pk2 = modified copies of input pkts as used for comparison
+        after applying masking of selected fields per the "no_xx" flags 
+    """
+
+    # make copies, blank out fields per compare flags
+    p1=pkt1.copy()
+    p2=pkt2.copy()
+    l='Ether'
+    if pkt1.haslayer(l) or pkt2.haslayer(l):
+        if not pkt1.haslayer(l):
+            return False, "pkt1 missing %s layer" % l, p1, p2
+        if not pkt2.haslayer(l):
+            return False, "pkt2 missing %s layer" % l, p1, p2
+    l='IP'
+    if pkt1.haslayer(l) or pkt2.haslayer(l):
+        if not pkt1.haslayer(l):
+            return False, "pkt1 missing %s layer" % l, p1, p2
+        if not pkt2.haslayer(l):
+            return False, "pkt2 missing %s layer" % l, p1, p2
+
+        if no_ip_chksum:
+            p1[IP].chksum=0
+            p2[IP].chksum=0
+
+    l='TCP'
+    if pkt1.haslayer(l) or pkt2.haslayer(l):
+        if not pkt1.haslayer(l):
+            return False, "pkt1 missing %s layer" % l, p1, p2
+        if not pkt2.haslayer(l):
+            return False, "pkt2 missing %s layer" % l, p1, p2
+
+        if no_tcp_chksum:
+            p1[TCP].chksum=0
+            p2[TCP].chksum=0
+
+
+    l='IXIA_FLOAT_INSTRUM'
+    if pkt1.haslayer(l) or pkt2.haslayer(l):
+        if not pkt1.haslayer(l):
+            return False, "pkt1 missing %s layer" % l, p1, p2
+        if not pkt2.haslayer(l):
+            return False, "pkt2 missing %s layer" % l, p1, p2
+
+        if no_tstamp:
+            p1[IXIA_FLOAT_INSTRUM].tstamp=0
+            p2[IXIA_FLOAT_INSTRUM].tstamp=0
+
+    
+    if len(pkt1) != len(pkt2):
+        return False, 'unequal len: pkt1=%d,pkt2=%d' % (len(pkt1), len(pkt2)), p1, p2
+
+    # Optionally remove raw/padding payloads
+    if no_payload:
+        if p1.haslayer(IXIA_FLOAT_INSTRUM):
+            p1.getlayer(IXIA_FLOAT_INSTRUM).remove_payload()
+        if p2.haslayer(IXIA_FLOAT_INSTRUM):
+            p2.getlayer(IXIA_FLOAT_INSTRUM).remove_payload()
+
+    
+    if str(p1) != str(p2):
+        print ("Layers: %s != %s " % (pkt_layers_str(p1), pkt_layers_str(p1)))
+        return False, "Mismatched", p1,p2
+    # else:
+    #     print ("Matched %s layers: %s == %s" % (l, str(p1),str(p2)))
+
+    return True, "", p1,p2

@@ -14,9 +14,9 @@ class IXIA_FIXED_INSTRUM(Packet):
                     IntField("seqnum", 0), 
                     IntField("tstamp", 0)  ] 
 
-bind_layers(IP, IXIA_FIXED_INSTRUM)
-bind_layers(UDP, IXIA_FIXED_INSTRUM)
-bind_layers(TCP, IXIA_FIXED_INSTRUM)
+# bind_layers(IP, IXIA_FIXED_INSTRUM)
+# bind_layers(UDP, IXIA_FIXED_INSTRUM)
+# bind_layers(TCP, IXIA_FIXED_INSTRUM)
 
 class IXIA_FLOAT_INSTRUM(Packet): 
    name = "IXIA_FLOAT_INSTRUM" 
