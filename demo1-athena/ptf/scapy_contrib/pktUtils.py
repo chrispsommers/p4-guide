@@ -616,101 +616,13 @@ def ixia_ip_packet_fixed_instrum(
     return pkt
 
 
-def compare_pkts(pkt1, pkt2):
-    """ Compare two packets, optionally skipping some parts
-        TODO - replace with general iteration through layers
-    """
-    if len(pkt1) != len(pkt2):
-        return False, 'unequal len'
-
-    l='Ether'
-    print ("pkt1= %s\npkt2=%s" % (str(pkt1),str(pkt2)))
-    if pkt1.haslayer(l) or pkt2.haslayer(l):
-        if not pkt1.haslayer(l):
-            return False, "pkt1 missing %s layer" % l
-        if not pkt2.haslayer(l):
-            return False, "pkt2 missing %s layer" % l
-
-        p1=pkt1[l].copy()
-        p2=pkt2[l].copy()
-        p1.remove_payload()
-        p2.remove_payload()
-        if str(p1) != str(p2):
-            return False, "Mismatched %s layers: %s != %s" % (l, str(p1),str(p2))
-        else:
-            print ("Matched %s layers: %s == %s" % (l, str(p1),str(p2)))
-
-    l='IP'
-    if pkt1.haslayer(l) or pkt2.haslayer(l):
-        if not pkt1.haslayer(l):
-            return False, "pkt1 missing %s layer" % l
-        if not pkt2.haslayer(l):
-            return False, "pkt2 missing %s layer" % l
-
-        p1=pkt1[l].copy()
-        p2=pkt2[l].copy()
-        p1.remove_payload()
-        p2.remove_payload()
-        if str(p1) != str(p2):
-            return False, "Mismatched %s layers: %s != %s" % (l, str(p1),str(p2))
-        else:
-            print ("Matched %s layers: %s == %s" % (l, str(p1),str(p2)))
-
-
-    l='TCP'
-    if pkt1.haslayer(l) or pkt2.haslayer(l):
-        if not pkt1.haslayer(l):
-            return False, "pkt1 missing %s layer" % l
-        if not pkt2.haslayer(l):
-            return False, "pkt2 missing %s layer" % l
-
-        p1=pkt1[l].copy()
-        p2=pkt2[l].copy()
-        p1.remove_payload()
-        p2.remove_payload()
-        if str(p1) != str(p2):
-            return False, "Mismatched %s layers: %s != %s" % (l, str(p1),str(p2))
-        else:
-            print ("Matched %s layers: %s == %s" % (l, str(p1),str(p2)))
-
-    return True,""
-
-
-def compare_headers(pkt1, pkt2):
-    """ Compare two packets, ignoring padding and raw
-        returns (bool, string) where bool = True if same, false otherwise; string explains first reason to fail
-    """
-    if len(pkt1) != len(pkt2):
-        return False, 'unequal len'
-
-    # https://stackoverflow.com/questions/13549294/get-all-the-layers-in-a-packet
-    layer_num = 0
-    while True:
-        l1 =pkt1.getlayer(layer_num)
-        l2 =pkt2.getlayer(layer_num)
-        if l1 is None and l2 is None:
-            return True, ''
-        if l1 is None:
-            return False, "pk1 missing %s" % l2.name
-        elif l2 is None:
-            return False, "pk2 missing %s" % l1.name
-        
-        if (l1.name == 'Raw' or l1.name == 'Padding') and (l2.name == 'Raw' or l2.name == 'Padding'):
-            return True, ''
-
-        if l1.name != l2.name:
-            return False, "Layer %d unequal: pkt1 has %s, pkt2 has %s" % (layer_num, l1.name, l2.name)
-
-        layer_num += 1
-
-
 def compare_pkts2(pkt1, pkt2,
                 no_ip_chksum=False,
                 no_tcp_chksum=False,
                 no_payload=False,
                 no_tstamp=False):
     """ Compare two packets, optionally skipping some parts
-        returne bool, string, masked pkt1, masked pkt2
+        return bool, string, masked pkt1, masked pkt2
         where bool = True if masked packets match,
         string = reason for mismatch,
         masked pkt1, masked pk2 = modified copies of input pkts as used for comparison

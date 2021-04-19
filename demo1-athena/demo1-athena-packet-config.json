@@ -81,7 +81,7 @@
                             "choice": "value",
                             "value": "10.1.0.1"
                         },
-                        "ttl": {
+                        "time_to_live": {
                             "choice": "value",
                             "value": 64
                         }

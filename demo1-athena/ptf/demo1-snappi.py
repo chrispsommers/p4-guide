@@ -21,7 +21,7 @@ import ptf
 import os
 from ptf import config
 import ptf.testutils as tu
-
+import urllib3
 from google.rpc import code_pb2
 
 import base_test as bt
@@ -248,16 +248,200 @@ class DupEntryTest(Demo1Test):
             add_entry_once()
 
 
-######################## snappi additions #########################
+######################## snappi tests #########################
 
+def print_pkts_side_by_side(p1,p2):
+    exl=len(p1)
+    bex=bytes(p1)
+    rxl=len(p2)
+    brx=bytes(p2)
+    maxlen= rxl if rxl>exl else exl
 
-class ConfigTest(Demo1Test):
+    print ("Byte#\t Exp \t Eq?\t Rx\n")
+    for i in range(maxlen):
+        if i < exl and i < rxl:
+            print ("[%d]\t %02x\t %s\t %02x" % (i, bex[i], "==" if brx[i]==bex[i] else "!=", brx[i]) )
+        elif i < exl:
+            print ("[%d]\t %02x\t %s\t %s" % (i, bex[i], "!=", "--") )
+        else:
+            print ("[%d]\t %s\t %s\t %02x" % (i, "--", "!=", brx[i]) )
+
+class SnappiFwdTestJson(Demo1Test):
     def setUp(self):
         Demo1Test.setUp(self)
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # Silence inecure warnings
         self.api = snappi.api(host='https://localhost:8080')
+
+        # Config method 1 - use config file to configure flows, merge in settings.json
         self.cfg = utils.common.load_test_config(
             self.api, 'demo1-athena-packet-config.json', apply_settings=True
         )
+        res = self.api.set_config(self.cfg)
+        assert len(res.errors) == 0, str(res.errors)
+
+
+    @bt.autocleanup
+    def runTest(self):
+        in_dmac = 'ee:30:ca:9d:1e:00'
+        in_smac = 'ee:cd:00:7e:70:00'
+        ip_dst_addr = '10.1.0.1'
+        ip_src_addr='192.168.0.1'
+        ig_port = 1
+
+        eg_port = 2
+        l2ptr = 58
+        bd = 9
+        out_dmac = '02:13:57:ab:cd:ef'
+        out_smac = '00:11:22:33:44:55'
+
+        # Before adding any table entries, the default behavior for
+        # sending in an IPv4 packet is to drop it.
+        pkt = tu.simple_tcp_packet(eth_src=in_smac, eth_dst=in_dmac,
+                                   ip_dst=ip_dst_addr, ip_ttl=64)
+        # tu.send_packet(self, ig_port, pkt)
+        # tu.verify_no_other_packets(self)
+        
+        # Add a set of table entries that the packet should match, and
+        # be forwarded out with the desired dest and source MAC
+        # addresses.
+        self.table_add(self.key_ipv4_da_lpm(ip_dst_addr, 32),
+                       self.act_set_l2ptr(l2ptr))
+        self.table_add(self.key_mac_da(l2ptr),
+                       self.act_set_bd_dmac_intf(bd, out_dmac, eg_port))
+        self.table_add(self.key_send_frame(bd), self.act_rewrite_mac(out_smac))
+
+        # Config, capture and start all in one
+        # utils.common.start_traffic(self.api, self.cfg) - error, port 1 not a capture port
+
+
+        cap_port_names = ['port2']
+        capture_state = self.api.capture_state()
+        capture_state.state = 'start'
+        capture_state.port_names = cap_port_names
+        print('Starting capture on ports %s ...' % str(cap_port_names))
+        res = self.api.set_capture_state(capture_state)
+        if len(res.errors):
+            print (str(res.errors))
+        assert len(res.errors) == 0, str(res.errors)
+
+        ts = self.api.transmit_state()
+        ts.state = ts.START
+        # Alternate semantics:
+        # transmit_state.state = 'start'
+        print('Starting traffic')
+        res = self.api.set_transmit_state(ts)
+        if len(res.errors):
+            print (str(res.errors))
+        assert len(res.errors) == 0, str(res.errors)
+
+        cap_dict = {}
+        for name in cap_port_names:
+            print('Fetching capture from port %s' % name)
+            capture_req = self.api.capture_request()
+            capture_req.port_name = name
+            pcap_bytes = self.api.get_capture(capture_req)
+
+            cap_dict[name] = []
+            for ts, pkt in dpkt.pcap.Reader(pcap_bytes):
+                if sys.version_info[0] == 2:
+                    raw = [ ord(b) for b in pkt]
+                else:
+                    raw = list(pkt)
+                cap_dict[name].append(raw)
+
+        brx = bytes(cap_dict['port2'][-1])
+        rx_pkt = Ether(brx)
+
+        # exp_pkt = tu.simple_tcp_packet(eth_src=out_smac, eth_dst=out_dmac,
+        #                         ip_dst=ip_dst_addr, ip_ttl=63)
+
+        # make the expected packet 4 bytes shorter to make the effective IP lengths equal. Athena will shorten by 4 bytes to account for added CRC.
+        # The 4 pad bytes aren't added to the ip len field by scapy
+        exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
+                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
+        # Force field updates (chksums, len, etc.)
+        exp_pkt = Ether(exp_pkt.build())
+
+
+        (equal, reason, p1,p2) = compare_pkts2(exp_pkt, rx_pkt,
+                                        # no_payload=True,
+                                        no_ip_chksum=True,
+                                        no_tcp_chksum=True,
+                                        no_tstamp=True)
+
+        if equal:
+            print ("Compare=%s: %s" % (equal, reason))
+            # print("\nExpected (masked):\n===============")
+            # p1.show()
+
+            # print("\nReceived (masked):\n===============")
+            # p2.show()
+        else:
+            print ("Mismatched %s" % ( reason))
+            print("\nExpected (masked):\n===============")
+            p1.show()
+
+            print("\nReceived (masked):\n===============")
+            p2.show()
+
+            print_pkts_side_by_side(p1,p2)
+
+            assert equal, "Rx %s != expected %s" % (brx, bex)
+
+            
+
+class SnappiFwdTest(Demo1Test):
+    def setUp(self):
+        Demo1Test.setUp(self)
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # Silence inecure warnings
+        self.api = snappi.api(host='https://localhost:8080')
+
+        # Config method 2 - use inline snappi code to configure flows
+        self.cfg = self.api.config()
+        # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
+        port1, port2 = (
+            self.cfg.ports
+            .port(name='port1', location='localhost:5555')
+            .port(name='port2', location='localhost:5556')
+        )
+
+        # configure layer 1 properties
+        layer1, = self.cfg.layer1.layer1(name='layer1')
+        layer1.port_names = [port1.name, port2.name]
+        layer1.speed = layer1.SPEED_1_GBPS
+
+        # Define capture properties
+        cap = self.cfg.captures.capture(name='c1')[0]
+        cap.port_names = [port2.name]
+        cap.format = 'pcap'
+
+        # layer1.media = layer1.FIBER
+        # configure flow properties
+        flow1, = self.cfg.flows.flow(name='f1')
+        # flow endpoints
+        flow1.tx_rx.port.tx_name = port1.name
+        flow1.tx_rx.port.rx_name = port2.name
+        # configure rate, size, frame count
+        flow1.size.fixed = 100
+        flow1.rate.percentage = 10
+        flow1.duration.fixed_packets.packets = 1
+        # configure protocol headers with defaults fields
+        flow1.packet.ethernet().ipv4().tcp()
+
+        eth = flow1.packet[0]
+        eth.src.value = "ee:cd:00:7e:70:00"
+        eth.dst.value = "ee:30:ca:9d:1e:00"
+
+        ipv4 = flow1.packet[1]
+        ipv4.dst.value = "10.1.0.1"
+        ipv4.src.value = "192.168.0.1"
+        ipv4.time_to_live.value = 64
+
+        tcp = flow1.packet[2]
+        tcp.src_port.value = 1234
+        tcp.dst_port.value = 80
+
+        # push configuration
         res = self.api.set_config(self.cfg)
         assert len(res.errors) == 0, str(res.errors)
 
@@ -342,9 +526,6 @@ class ConfigTest(Demo1Test):
                                 ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
         # Force field updates (chksums, len, etc.)
         exp_pkt = Ether(exp_pkt.build())
-
-        # bex=bytes(exp_pkt)
-
         (equal, reason, p1,p2) = compare_pkts2(exp_pkt, rx_pkt,
                                         # no_payload=True,
                                         no_ip_chksum=True,
@@ -353,11 +534,11 @@ class ConfigTest(Demo1Test):
 
         if equal:
             print ("Compare=%s: %s" % (equal, reason))
-            print("\nExpected (masked):\n===============")
-            p1.show()
+            # print("\nExpected (masked):\n===============")
+            # p1.show()
 
-            print("\nReceived (masked):\n===============")
-            p2.show()
+            # print("\nReceived (masked):\n===============")
+            # p2.show()
         else:
             print ("Mismatched %s" % ( reason))
             print("\nExpected (masked):\n===============")
@@ -366,20 +547,7 @@ class ConfigTest(Demo1Test):
             print("\nReceived (masked):\n===============")
             p2.show()
 
-            exl=len(p1)
-            bex=bytes(p1)
-            rxl=len(p2)
-            brx=bytes(p2)
-            maxlen= rxl if rxl>exl else exl
-
-            print ("offset\t Exp \t Eq?\t Rx\n")
-            for i in range(maxlen):
-                if i < exl and i < rxl:
-                    print ("[%d]\t %02x\t %s\t %02x" % (i, bex[i], "==" if brx[i]==bex[i] else "!=", brx[i]) )
-                elif i < exl:
-                    print ("[%d]\t %02x\t %s\t %s" % (i, bex[i], "!=", "--") )
-                else:
-                    print ("[%d]\t %s\t %s\t %02x" % (i, "--", "!=", brx[i]) )
+            print_pkts_side_by_side(p1,p2)
 
             assert equal, "Rx %s != expected %s" % (brx, bex)
 
