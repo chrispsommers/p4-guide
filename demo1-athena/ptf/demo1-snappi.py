@@ -266,108 +266,76 @@ def print_pkts_side_by_side(p1,p2):
         else:
             print ("[%d]\t %s\t %s\t %02x" % (i, "--", "!=", brx[i]) )
 
-class SnappiFwdTestJson(Demo1Test):
-    def setUp(self):
-        Demo1Test.setUp(self)
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # Silence inecure warnings
-        self.api = snappi.api(host='https://localhost:8080')
+class SnappiPtfUtils():
+    """
+    Convenience methods to simplify converting PTF tests to use snappi instead of scapy
+    """
 
-        # Config method 1 - use config file to configure flows, merge in settings.json
-        self.cfg = utils.common.load_test_config(
-            self.api, 'demo1-athena-packet-config.json', apply_settings=True
-        )
-        res = self.api.set_config(self.cfg)
-        assert len(res.errors) == 0, str(res.errors)
-
-
-    @bt.autocleanup
-    def runTest(self):
-        in_dmac = 'ee:30:ca:9d:1e:00'
-        in_smac = 'ee:cd:00:7e:70:00'
-        ip_dst_addr = '10.1.0.1'
-        ip_src_addr='192.168.0.1'
-        ig_port = 1
-
-        eg_port = 2
-        l2ptr = 58
-        bd = 9
-        out_dmac = '02:13:57:ab:cd:ef'
-        out_smac = '00:11:22:33:44:55'
-
-        # Before adding any table entries, the default behavior for
-        # sending in an IPv4 packet is to drop it.
-        pkt = tu.simple_tcp_packet(eth_src=in_smac, eth_dst=in_dmac,
-                                   ip_dst=ip_dst_addr, ip_ttl=64)
-        # tu.send_packet(self, ig_port, pkt)
-        # tu.verify_no_other_packets(self)
-        
-        # Add a set of table entries that the packet should match, and
-        # be forwarded out with the desired dest and source MAC
-        # addresses.
-        self.table_add(self.key_ipv4_da_lpm(ip_dst_addr, 32),
-                       self.act_set_l2ptr(l2ptr))
-        self.table_add(self.key_mac_da(l2ptr),
-                       self.act_set_bd_dmac_intf(bd, out_dmac, eg_port))
-        self.table_add(self.key_send_frame(bd), self.act_rewrite_mac(out_smac))
-
-        # Config, capture and start all in one
-        # utils.common.start_traffic(self.api, self.cfg) - error, port 1 not a capture port
-
-
-        cap_port_names = ['port2']
-        capture_state = self.api.capture_state()
+    def start_capture(api, cap_port_names):
+        """ Start a capture which was already configured.
+        api - snappi api handle
+        cap_port_names - a [list] of ports to be captured
+        """
+        capture_state = api.capture_state()
         capture_state.state = 'start'
         capture_state.port_names = cap_port_names
         print('Starting capture on ports %s ...' % str(cap_port_names))
-        res = self.api.set_capture_state(capture_state)
+        res = api.set_capture_state(capture_state)
         if len(res.errors):
             print (str(res.errors))
         assert len(res.errors) == 0, str(res.errors)
 
-        ts = self.api.transmit_state()
+    def start_traffic(api):
+        """ Start traffic flow(s) whicih are already configured.
+        api - snappi api handle
+        """
+        ts = api.transmit_state()
         ts.state = ts.START
         # Alternate semantics:
         # transmit_state.state = 'start'
         print('Starting traffic')
-        res = self.api.set_transmit_state(ts)
+        res = api.set_transmit_state(ts)
         if len(res.errors):
             print (str(res.errors))
         assert len(res.errors) == 0, str(res.errors)
 
+    def verify_no_pkts_on_port(api, cap_port_name):
+        """ Returns true if no bytes captured on a port
+        api - snappi API handle
+        cap_port_name - single port to examine
+        returns True if condition passes, else assserts
+        """
+        print('Fetching capture from port %s' % cap_port_name)
+        capture_req = api.capture_request()
+        capture_req.port_name = cap_port_name
+        pcap_bytes = api.get_capture(capture_req)
+        assert not any(pcap_bytes), "Found packet(s) on %s" % cap_port_name
+        return True
+
+    def verify_capture_on_port(api, exp_pkt, cap_port_name, pkt_compare_func=compare_pkts2):
+        """ Returns true if last packet captured on specified port matches exp_packet
+        api - snappi API handle
+        cap_port_name - single port to examine
+        pkt_compare_func - optional custom compare function, allows ignoring selected fields, for example
+        """
         cap_dict = {}
-        for name in cap_port_names:
-            print('Fetching capture from port %s' % name)
-            capture_req = self.api.capture_request()
-            capture_req.port_name = name
-            pcap_bytes = self.api.get_capture(capture_req)
+        print('Fetching capture from port %s' % cap_port_name)
+        capture_req = api.capture_request()
+        capture_req.port_name = cap_port_name
+        pcap_bytes = api.get_capture(capture_req)
 
-            cap_dict[name] = []
-            for ts, pkt in dpkt.pcap.Reader(pcap_bytes):
-                if sys.version_info[0] == 2:
-                    raw = [ ord(b) for b in pkt]
-                else:
-                    raw = list(pkt)
-                cap_dict[name].append(raw)
+        cap_dict[cap_port_name] = []
+        for ts, pkt in dpkt.pcap.Reader(pcap_bytes):
+            if sys.version_info[0] == 2:
+                raw = [ ord(b) for b in pkt]
+            else:
+                raw = list(pkt)
+            cap_dict[cap_port_name].append(raw)
 
-        brx = bytes(cap_dict['port2'][-1])
+        brx = bytes(cap_dict[cap_port_name][-1]) # last pkt
         rx_pkt = Ether(brx)
 
-        # exp_pkt = tu.simple_tcp_packet(eth_src=out_smac, eth_dst=out_dmac,
-        #                         ip_dst=ip_dst_addr, ip_ttl=63)
-
-        # make the expected packet 4 bytes shorter to make the effective IP lengths equal. Athena will shorten by 4 bytes to account for added CRC.
-        # The 4 pad bytes aren't added to the ip len field by scapy
-        exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
-                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
-        # Force field updates (chksums, len, etc.)
-        exp_pkt = Ether(exp_pkt.build())
-
-
-        (equal, reason, p1,p2) = compare_pkts2(exp_pkt, rx_pkt,
-                                        # no_payload=True,
-                                        no_ip_chksum=True,
-                                        no_tcp_chksum=True,
-                                        no_tstamp=True)
+        (equal, reason, p1,p2) = pkt_compare_func(exp_pkt, rx_pkt)
 
         if equal:
             print ("Compare=%s: %s" % (equal, reason))
@@ -386,16 +354,82 @@ class SnappiFwdTestJson(Demo1Test):
 
             print_pkts_side_by_side(p1,p2)
 
-            assert equal, "Rx %s != expected %s" % (brx, bex)
+            assert equal, "Packets don't match: %s != %s" % (str(p1), str(p2))
+            return True
 
-            
 
-class SnappiFwdTest(Demo1Test):
+
+class SnappiFwdTestBase(Demo1Test):
     def setUp(self):
         Demo1Test.setUp(self)
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # Silence inecure warnings
         self.api = snappi.api(host='https://localhost:8080')
 
+    def pkt_compare_func(self, exp_pkt, rx_pkt):
+        """ Packet compare callback to filter certain fields"""
+        return compare_pkts2(exp_pkt, rx_pkt,
+                                        # no_payload=True,
+                                        no_ip_chksum=True,
+                                        no_tcp_chksum=True,
+                                        no_tstamp=True)
+
+class SnappiFwdTestJson(SnappiFwdTestBase):
+    def setUp(self):
+        SnappiFwdTestBase.setUp(self)
+
+    @bt.autocleanup
+    def runTest(self):
+
+        # Config method 1 - use config file to configure flows, merge in settings.json
+        # Note this method requires xternal JSON file be in sync with the P4 table programming values
+        # and packet compare values defined below, which could be a maintenance burden
+        self.cfg = utils.common.load_test_config(
+            self.api, 'demo1-athena-packet-config.json', apply_settings=True
+        )
+        res = self.api.set_config(self.cfg)
+        assert len(res.errors) == 0, str(res.errors)
+        in_dmac = 'ee:30:ca:9d:1e:00'
+        in_smac = 'ee:cd:00:7e:70:00'
+        ip_dst_addr = '10.1.0.1'
+        ip_src_addr='192.168.0.1'
+        ig_port = 1
+
+        eg_port = 2
+        l2ptr = 58
+        bd = 9
+        out_dmac = '02:13:57:ab:cd:ef'
+        out_smac = '00:11:22:33:44:55'
+
+        print ("Send packet prior to configuring tables, verify packets are dropped...")
+        capture_port_name = 'port2'
+        SnappiPtfUtils.start_capture(self.api, [capture_port_name])
+        SnappiPtfUtils.start_traffic(self.api)
+        assert(SnappiPtfUtils.verify_no_pkts_on_port(self.api, capture_port_name))
+        
+        # Add a set of table entries that the packet should match, and
+        # be forwarded out with the desired dest and source MAC addresses.
+        self.table_add(self.key_ipv4_da_lpm(ip_dst_addr, 32),
+                       self.act_set_l2ptr(l2ptr))
+        self.table_add(self.key_mac_da(l2ptr),
+                       self.act_set_bd_dmac_intf(bd, out_dmac, eg_port))
+        self.table_add(self.key_send_frame(bd), self.act_rewrite_mac(out_smac))
+
+        exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
+                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
+        # Force field updates (chksums, len, etc.)
+        exp_pkt = Ether(exp_pkt.build())
+
+        print ("Send packet after configuring tables, verify packets are forwarded...")
+        SnappiPtfUtils.start_capture(self.api, [capture_port_name])
+        SnappiPtfUtils.start_traffic(self.api)
+        SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, capture_port_name, self.pkt_compare_func)
+
+class SnappiFwdTest(SnappiFwdTestBase):
+    def setUp(self):
+        SnappiFwdTestBase.setUp(self)
+
+    @bt.autocleanup
+    def runTest(self):
         # Config method 2 - use inline snappi code to configure flows
         self.cfg = self.api.config()
         # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
@@ -428,13 +462,19 @@ class SnappiFwdTest(Demo1Test):
         # configure protocol headers with defaults fields
         flow1.packet.ethernet().ipv4().tcp()
 
+        # Header values used to define packet contents, will be reused in P4 table entries
+        in_dmac = 'ee:30:ca:9d:1e:00'
+        in_smac = 'ee:cd:00:7e:70:00'
+        ip_dst_addr = '10.1.0.1'
+        ip_src_addr='192.168.0.1'
+
         eth = flow1.packet[0]
-        eth.src.value = "ee:cd:00:7e:70:00"
-        eth.dst.value = "ee:30:ca:9d:1e:00"
+        eth.src.value = in_smac
+        eth.dst.value = in_dmac
 
         ipv4 = flow1.packet[1]
-        ipv4.dst.value = "10.1.0.1"
-        ipv4.src.value = "192.168.0.1"
+        ipv4.dst.value = ip_dst_addr
+        ipv4.src.value = ip_src_addr
         ipv4.time_to_live.value = 64
 
         tcp = flow1.packet[2]
@@ -445,30 +485,23 @@ class SnappiFwdTest(Demo1Test):
         res = self.api.set_config(self.cfg)
         assert len(res.errors) == 0, str(res.errors)
 
-    @bt.autocleanup
-    def runTest(self):
-        in_dmac = 'ee:30:ca:9d:1e:00'
-        in_smac = 'ee:cd:00:7e:70:00'
-        ip_dst_addr = '10.1.0.1'
-        ip_src_addr='192.168.0.1'
-        ig_port = 1
+        print ("Send packet prior to configuring tables, verify packets are dropped...")
+        capture_port_name = 'port2'
+        SnappiPtfUtils.start_capture(self.api, [capture_port_name])
+        SnappiPtfUtils.start_traffic(self.api)
+        assert(SnappiPtfUtils.verify_no_pkts_on_port(self.api, capture_port_name))
+        
+        # Add a set of table entries that the packet should match, and
+        # be forwarded out with the desired dest and source MAC
+        # addresses.
 
+        # Add'l match-action table values:
+        ig_port = 1
         eg_port = 2
         l2ptr = 58
         bd = 9
         out_dmac = '02:13:57:ab:cd:ef'
         out_smac = '00:11:22:33:44:55'
-
-        # Before adding any table entries, the default behavior for
-        # sending in an IPv4 packet is to drop it.
-        pkt = tu.simple_tcp_packet(eth_src=in_smac, eth_dst=in_dmac,
-                                   ip_dst=ip_dst_addr, ip_ttl=64)
-        # tu.send_packet(self, ig_port, pkt)
-        # tu.verify_no_other_packets(self)
-        
-        # Add a set of table entries that the packet should match, and
-        # be forwarded out with the desired dest and source MAC
-        # addresses.
         self.table_add(self.key_ipv4_da_lpm(ip_dst_addr, 32),
                        self.act_set_l2ptr(l2ptr))
         self.table_add(self.key_mac_da(l2ptr),
@@ -478,79 +511,15 @@ class SnappiFwdTest(Demo1Test):
         # Config, capture and start all in one
         # utils.common.start_traffic(self.api, self.cfg) - error, port 1 not a capture port
 
-
-        cap_port_names = ['port2']
-        capture_state = self.api.capture_state()
-        capture_state.state = 'start'
-        capture_state.port_names = cap_port_names
-        print('Starting capture on ports %s ...' % str(cap_port_names))
-        res = self.api.set_capture_state(capture_state)
-        if len(res.errors):
-            print (str(res.errors))
-        assert len(res.errors) == 0, str(res.errors)
-
-        ts = self.api.transmit_state()
-        ts.state = ts.START
-        # Alternate semantics:
-        # transmit_state.state = 'start'
-        print('Starting traffic')
-        res = self.api.set_transmit_state(ts)
-        if len(res.errors):
-            print (str(res.errors))
-        assert len(res.errors) == 0, str(res.errors)
-
-        cap_dict = {}
-        for name in cap_port_names:
-            print('Fetching capture from port %s' % name)
-            capture_req = self.api.capture_request()
-            capture_req.port_name = name
-            pcap_bytes = self.api.get_capture(capture_req)
-
-            cap_dict[name] = []
-            for ts, pkt in dpkt.pcap.Reader(pcap_bytes):
-                if sys.version_info[0] == 2:
-                    raw = [ ord(b) for b in pkt]
-                else:
-                    raw = list(pkt)
-                cap_dict[name].append(raw)
-
-        brx = bytes(cap_dict['port2'][-1])
-        rx_pkt = Ether(brx)
-
-        # exp_pkt = tu.simple_tcp_packet(eth_src=out_smac, eth_dst=out_dmac,
-        #                         ip_dst=ip_dst_addr, ip_ttl=63)
-
-        # make the expected packet 4 bytes shorter to make the effective IP lengths equal. Athena will shorten by 4 bytes to account for added CRC.
-        # The 4 pad bytes aren't added to the ip len field by scapy
         exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
                                 ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
         # Force field updates (chksums, len, etc.)
         exp_pkt = Ether(exp_pkt.build())
-        (equal, reason, p1,p2) = compare_pkts2(exp_pkt, rx_pkt,
-                                        # no_payload=True,
-                                        no_ip_chksum=True,
-                                        no_tcp_chksum=True,
-                                        no_tstamp=True)
 
-        if equal:
-            print ("Compare=%s: %s" % (equal, reason))
-            # print("\nExpected (masked):\n===============")
-            # p1.show()
-
-            # print("\nReceived (masked):\n===============")
-            # p2.show()
-        else:
-            print ("Mismatched %s" % ( reason))
-            print("\nExpected (masked):\n===============")
-            p1.show()
-
-            print("\nReceived (masked):\n===============")
-            p2.show()
-
-            print_pkts_side_by_side(p1,p2)
-
-            assert equal, "Rx %s != expected %s" % (brx, bex)
-
+        capture_port_name = 'port2'
+        SnappiPtfUtils.start_capture(self.api, [capture_port_name])
+        SnappiPtfUtils.start_traffic(self.api)
+        SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, capture_port_name, self.pkt_compare_func)
             
             
 
