@@ -10,7 +10,7 @@ bin/protobuf/
 bin/ptf/
 graphs/
 **/__pycache__/
-ss-log.txt
+ss-log*.txt
 cmds-p4runtime.txt
 ptf.pcap
 ptf.log
