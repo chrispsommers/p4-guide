@@ -515,21 +515,21 @@ def print_stats(port_stats=None, flow_stats=None, clear_screen=None):
         os.system('clear')
 
     if port_stats:
-        row_format = "{:>15}" * 6
-        border = '-' * (15 * 6 + 5)
+        row_format = "{:>15}" * 7
+        border = '-' * (15 * 7 + 5)
         print('\nPort Stats')
         print(border)
         print(
             row_format.format(
                 'Port', 'Tx Frames', 'Tx Bytes', 'Rx Frames', 'Rx Bytes',
-                'Tx FPS'
+                'Tx FPS', 'Rx FPS'
             )
         )
         for stat in port_stats:
             print(
                 row_format.format(
                     stat.name, stat.frames_tx, stat.bytes_tx, stat.frames_rx,
-                    stat.bytes_rx, stat.frames_tx_rate
+                    stat.bytes_rx, stat.frames_tx_rate, stat.frames_rx_rate
                 )
             )
         print(border)

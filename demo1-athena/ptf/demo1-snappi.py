@@ -16,6 +16,8 @@
 
 # Andy Fingerhut, andy.fingerhut@gmail.com
 
+# Modifications Copyright 2021 Keysight Technologies
+
 import logging
 import ptf
 import os
@@ -90,110 +92,6 @@ class Demo1Test(Demo1TestBase):
         success = bt.P4RuntimeTest.updateConfig(self)
         assert success
 
-
-class FwdTest(Demo1Test):
-    @bt.autocleanup
-    def runTest(self):
-        in_dmac = 'ee:30:ca:9d:1e:00'
-        in_smac = 'ee:cd:00:7e:70:00'
-        ip_dst_addr = '10.1.0.1'
-        ig_port = 1
-
-        eg_port = 2
-        l2ptr = 58
-        bd = 9
-        out_dmac = '02:13:57:ab:cd:ef'
-        out_smac = '00:11:22:33:44:55'
-
-        # Before adding any table entries, the default behavior for
-        # sending in an IPv4 packet is to drop it.
-        pkt = tu.simple_tcp_packet(eth_src=in_smac, eth_dst=in_dmac,
-                                   ip_dst=ip_dst_addr, ip_ttl=64)
-        tu.send_packet(self, ig_port, pkt)
-        tu.verify_no_other_packets(self)
-        
-        # Add a set of table entries that the packet should match, and
-        # be forwarded out with the desired dest and source MAC
-        # addresses.
-        self.table_add(self.key_ipv4_da_lpm(ip_dst_addr, 32),
-                       self.act_set_l2ptr(l2ptr))
-        self.table_add(self.key_mac_da(l2ptr),
-                       self.act_set_bd_dmac_intf(bd, out_dmac, eg_port))
-        self.table_add(self.key_send_frame(bd), self.act_rewrite_mac(out_smac))
-
-        # Check that the entry is hit, expected source and dest MAC
-        # have been written into output packet, TTL has been
-        # decremented, and that no other packets are received.
-        exp_pkt = tu.simple_tcp_packet(eth_src=out_smac, eth_dst=out_dmac,
-                                       ip_dst=ip_dst_addr, ip_ttl=63)
-        tu.send_packet(self, ig_port, pkt)
-        tu.verify_packets(self, exp_pkt, [eg_port])
-        
-
-class PrefixLen0Test(Demo1Test):
-    @bt.autocleanup
-    def runTest(self):
-        in_dmac = 'ee:30:ca:9d:1e:00'
-        in_smac = 'ee:cd:00:7e:70:00'
-        ig_port = 1
-
-        entries = []
-        # 'ip_dst_addr' and 'prefix_len' fields represent the key to
-        # add to the LPM table.  'pkt_in_dst_addr' is one IPv4 address
-        # such that if a packet is sent in with that as the dest
-        # address, it should match the given table entry, not one of
-        # the others.  There may be many other such addresses, but we
-        # just need one for this particular test.
-        entries.append({'ip_dst_addr': '10.1.0.1',
-                        'prefix_len': 32,
-                        'pkt_in_dst_addr': '10.1.0.1',
-                        'eg_port': 2,
-                        'l2ptr': 58,
-                        'bd': 9,
-                        'out_dmac': '02:13:57:ab:cd:ef',
-                        'out_smac': '00:11:22:33:44:55'})
-        entries.append({'ip_dst_addr': '10.1.0.0',
-                        'prefix_len': 16,
-                        'pkt_in_dst_addr': '10.1.2.3',
-                        'eg_port': 3,
-                        'l2ptr': 59,
-                        'bd': 10,
-                        'out_dmac': '02:13:57:ab:cd:f0',
-                        'out_smac': '00:11:22:33:44:56'})
-        entries.append({'ip_dst_addr': '0.0.0.0',
-                        'prefix_len': 0,
-                        'pkt_in_dst_addr': '20.0.0.1',
-                        'eg_port': 4,
-                        'l2ptr': 60,
-                        'bd': 11,
-                        'out_dmac': '02:13:57:ab:cd:f1',
-                        'out_smac': '00:11:22:33:44:57'})
-
-        for e in entries:
-            self.table_add(self.key_ipv4_da_lpm(e['ip_dst_addr'],
-                                                e['prefix_len']),
-                           self.act_set_l2ptr(e['l2ptr']))
-            self.table_add(self.key_mac_da(e['l2ptr']),
-                           self.act_set_bd_dmac_intf(e['bd'], e['out_dmac'],
-                                                     e['eg_port']))
-            self.table_add(self.key_send_frame(e['bd']),
-                           self.act_rewrite_mac(e['out_smac']))
-
-        ttl_in = 100
-        for e in entries:
-            ip_dst_addr = e['pkt_in_dst_addr']
-            eg_port = e['eg_port']
-            pkt_in = tu.simple_tcp_packet(eth_src=in_smac, eth_dst=in_dmac,
-                                          ip_dst=ip_dst_addr, ip_ttl=ttl_in)
-            exp_pkt = tu.simple_tcp_packet(eth_src=e['out_smac'],
-                                           eth_dst=e['out_dmac'],
-                                           ip_dst=ip_dst_addr,
-                                           ip_ttl=ttl_in - 1)
-            tu.send_packet(self, ig_port, pkt_in)
-            tu.verify_packets(self, exp_pkt, [eg_port])
-            # Vary TTL in for each packet tested, just to make them
-            # easy to distinguish from each other.
-            ttl_in = ttl_in - 10
 
 ######################## snappi tests #########################
 
@@ -352,6 +250,20 @@ class SnappiPtfUtils():
         return True
 
 
+def results_ok(api, cfg, csv_dir=None):
+    """
+    Returns true if stats are as expected, false otherwise.
+    """
+    port_results, flow_results = utils.get_all_stats(api, print_output=False)
+    if csv_dir is not None:
+        utils.print_csv(csv_dir, port_results, flow_results)
+    port_tx = sum([p.frames_tx for p in port_results if p.name == 'tx'])
+    port_rx = sum([p.frames_rx for p in port_results if p.name == 'rx'])
+
+    return port_tx == port_rx and all(
+        [f.transmit == 'stopped' for f in flow_results]
+    )
+
 class SnappiFwdTestBase(Demo1Test):
     def setUp(self):
         Demo1Test.setUp(self)
@@ -397,6 +309,10 @@ class SnappiFwdTestJson(SnappiFwdTestBase):
         capture_port_name = 'port2'
         SnappiPtfUtils.start_capture(self.api, [capture_port_name])
         SnappiPtfUtils.start_traffic(self.api)
+        # Snappi flow-based test for dropped packets:
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # Traditional PTF port-based test for dropped packets:
         assert(SnappiPtfUtils.verify_no_other_packets(self.api, [capture_port_name]))
         
         # Add a set of table entries that the packet should match, and
@@ -412,9 +328,14 @@ class SnappiFwdTestJson(SnappiFwdTestBase):
         # Force field updates (chksums, len, etc.)
         exp_pkt = Ether(exp_pkt.build())
 
-        print ("Send packet after configuring tables, verify packets are forwarded...")
+        print ("Send packet after configuring tables, verify captured packets byte-by-byte...")
         SnappiPtfUtils.start_capture(self.api, [capture_port_name])
         SnappiPtfUtils.start_traffic(self.api)
+
+        utils.wait_for(
+            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            interval_seconds=2, timeout_seconds=10
+        )
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, capture_port_name, self.pkt_compare_func)
 
 class SnappiFwdTest(SnappiFwdTestBase):
@@ -444,7 +365,7 @@ class SnappiFwdTest(SnappiFwdTestBase):
 
         # layer1.media = layer1.FIBER
         # configure flow properties
-        flow1, = self.cfg.flows.flow(name='f1')
+        flow1 = self.cfg.flows.flow(name='f1')[-1]
         # flow endpoints
         flow1.tx_rx.port.tx_name = port1.name
         flow1.tx_rx.port.rx_name = port2.name
@@ -482,6 +403,10 @@ class SnappiFwdTest(SnappiFwdTestBase):
         capture_port_name = 'port2'
         SnappiPtfUtils.start_capture(self.api, [capture_port_name])
         SnappiPtfUtils.start_traffic(self.api)
+        # Snappi flow-based test for dropped packets:
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # Traditional PTF port-based test for dropped packets:
         assert(SnappiPtfUtils.verify_no_other_packets(self.api, [capture_port_name]))
         
         # Add a set of table entries that the packet should match, and
@@ -512,6 +437,11 @@ class SnappiFwdTest(SnappiFwdTestBase):
         capture_port_name = 'port2'
         SnappiPtfUtils.start_capture(self.api, [capture_port_name])
         SnappiPtfUtils.start_traffic(self.api)
+
+        utils.wait_for(
+            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            interval_seconds=2, timeout_seconds=10
+        )
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, capture_port_name, self.pkt_compare_func)
             
             
@@ -573,9 +503,15 @@ class SnappiFwdTestJsonBidir(SnappiFwdTestBase):
         # Force field updates (chksums, len, etc.)
         exp_pkt = Ether(exp_pkt.build())
 
-        print ("Send packet after configuring tables, verify packets are forwarded...")
+        print ("Send packet after configuring tables, verify captured packets byte-by-byte...")
         SnappiPtfUtils.start_capture(self.api, capture_port_names)
         SnappiPtfUtils.start_traffic(self.api)
+
+        # Wait for all packets to be received
+        utils.wait_for(
+            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            interval_seconds=2, timeout_seconds=10
+        )
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, 'port2', self.pkt_compare_func)
 
         # Reverse direction - in port2, out port1
@@ -647,8 +583,8 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         tcp.dst_port.value = 80
 
         # flow2 
-        self.cfg.flows.append(snappi.Flow(name='f2'))
-        flow2 = self.cfg.flows[1]
+        self.cfg.flows.flow(name='f2')
+        flow2 = self.cfg.flows[1] # access with index
         flow2.tx_rx.port.tx_name = port2.name
         flow2.tx_rx.port.rx_name = port1.name
         # configure rate, size, frame count
@@ -709,9 +645,14 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         # Force field updates (chksums, len, etc.)
         exp_pkt = Ether(exp_pkt.build())
 
-        print ("Send packet after configuring tables, verify packets are forwarded...")
+        print ("Send packet after configuring tables, verify captured packets byte-by-byte...")
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
         SnappiPtfUtils.start_traffic(self.api)
+
+        utils.wait_for(
+            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            interval_seconds=2, timeout_seconds=10
+        )
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, 'port2', self.pkt_compare_func)
 
         # Reverse direction - in port2, out port1
@@ -822,11 +763,17 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         res = self.api.set_config(self.cfg)
         assert len(res.errors) == 0, str(res.errors)
 
-        # print ("Send packet prior to configuring tables, verify packets are dropped...")
-        # SnappiPtfUtils.start_capture(self.api, cap.port_names)
-        # SnappiPtfUtils.start_traffic(self.api)
-        # time.sleep(tx_count/100)
-        # assert(SnappiPtfUtils.verify_no_other_packets(self.api, cap.port_names))
+        print ("Send packet prior to configuring tables, verify packets are dropped...")
+        SnappiPtfUtils.start_capture(self.api, cap.port_names)
+        SnappiPtfUtils.start_traffic(self.api)
+        time.sleep(tx_count/100)
+
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        # Snappi flow-based test for dropped packets:
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # Traditional PTF port-based test for dropped packets:
+        assert(SnappiPtfUtils.verify_no_other_packets(self.api, cap.port_names))
         
         # Add a set of table entries that the packet should match, and
         # be forwarded out with the desired dest and source MAC
@@ -858,10 +805,20 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
                                 ip_src=ip_src_addr, ip_dst='10.1.0.%d' % i, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00') for i in range(compare_count)]
         exp_pkts = [Ether(exp_pkts[i].build()) for i in range(len(exp_pkts))] # force recalc chksum, len,etc.
 
-        print ("Send packet after configuring tables, verify packets are forwarded...")
+        print ("Send packet after configuring tables, verify captured packets byte-by-byte...")
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
         SnappiPtfUtils.start_traffic(self.api)
-        time.sleep(tx_count/50)
+
+        utils.get_all_stats(self.api, print_output=True)
+
+
+        utils.wait_for(
+            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            interval_seconds=2, timeout_seconds=10
+        )
+
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        assert all([stat.frames_rx == tx_count/2 for stat in flow_results]), "Did not receive expected %d frames on all flows" % tx_count/2
 
         SnappiPtfUtils.verify_captures_on_port(self.api, exp_pkts, 'port2', self.pkt_compare_func)
 
@@ -870,8 +827,125 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
                                 ip_src=ip_dst_addr, ip_dst='192.168.0.%d' % i, ip_ttl=63, tcp_window=0,
                                 tcp_sport=80, tcp_dport=1234)/Padding('\x00\x00\x00\x00')) for i in range(compare_count)]
         exp_pkts2 = [Ether(exp_pkts2[i].build()) for i in range(len(exp_pkts2))] # force recalc chksum, len,etc.
-
+        
         SnappiPtfUtils.verify_captures_on_port(self.api, exp_pkts2, 'port1', self.pkt_compare_func)
 
+class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
+    """
+    Send 512 packets in each direction with incr. DIP
+    LPM set to mask 8 LSBs
+    Confirm only 256 packets arrived on each output
+    """
+    def setUp(self):
+        SnappiFwdTestBase.setUp(self)
 
+    @bt.autocleanup
+    def runTest(self):
+        # Define # ports, indices, names - will reuse a lot
+        self.NUMPORTS=4
+        self.port_ndxs=list(range(self.NUMPORTS))
+        port_names = ['port%d' % (i+1) for i in self.port_ndxs]
+
+        self.cfg = self.api.config()
+        # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
+        ports = [self.cfg.ports.port(name='port%d' % (i+1), location='localhost:%d' % (5555+i))[-1] for i in self.port_ndxs]
+
+        # configure layer 1 properties
+        layer1, = self.cfg.layer1.layer1(name='layer1')
+        layer1.port_names = port_names
+        layer1.speed = layer1.SPEED_1_GBPS
+
+        # Define capture properties
+        cap = self.cfg.captures.capture(name='c1')[0]
+        cap.port_names = port_names
+        cap.format = 'pcap'
+
+        tx_count = 255
+
+        # Header values used to define packet contents, will be reused in P4 table entries
+        host_macs=['ee:00:00:00:00:%02x' % (i+1) for i in self.port_ndxs]
+        switch_macs=['dd:00:00:00:00:%02x' % (i+1) for i in self.port_ndxs]
+        ip_subnets=['192.168.%d.0' % (i+1) for i in self.port_ndxs]
+        ip_hosts=['192.168.%d.1' % (i+1) for i in self.port_ndxs]
+
+        i = 0
+        for src in self.port_ndxs:
+            for dst in self.port_ndxs:
+                if src == dst:
+                    continue # no hairpin switching
+
+                print("Configuring flow[%d]: %s => %s" % (i, ports[src].name, ports[dst].name))
+                flow = self.cfg.flows.flow(name='f%d' %i)[-1]
+                # flow endpoints
+                flow.tx_rx.port.tx_name = ports[src].name
+                flow.tx_rx.port.rx_name = ports[dst].name
+                # configure rate, size, frame count
+                flow.size.fixed = 100
+                flow.rate.pps = 50
+                flow.duration.fixed_packets.packets = tx_count
+                # configure protocol headers with defaults fields
+                flow.packet.ethernet().ipv4().tcp()
+
+                eth = flow.packet[0]
+                eth.src.value = host_macs[src]
+                eth.dst.value = host_macs[dst]
+
+                ipv4 = flow.packet[1]
+                ipv4.dst.increment.start = ip_hosts[dst]
+                ipv4.dst.increment.step = '0.0.0.1'
+                ipv4.dst.increment.count = tx_count
+                ipv4.src.value = ip_hosts[src]
+                ipv4.time_to_live.value = 64
+
+                tcp = flow.packet[2]
+                tcp.src_port.value = 1234
+                tcp.dst_port.value = 80
+
+                i+=1
+
+        print(self.cfg)
+
+        # push configuration
+        print ("Applying snappi config:\n%s" % self.cfg)
+        res = self.api.set_config(self.cfg)
+        assert len(res.errors) == 0, str(res.errors)
+        print ("Applied snappi config: OK")
+
+        print ("Send packet prior to configuring tables, verify packets are dropped...")
+        SnappiPtfUtils.start_capture(self.api, cap.port_names)
+        SnappiPtfUtils.start_traffic(self.api)
+        time.sleep(tx_count/100)
+
+        # Snappi flow-based test for dropped packets:
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # Traditional PTF port-based test for dropped packets:
+        assert(SnappiPtfUtils.verify_no_other_packets(self.api, cap.port_names))
+
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=False)
+        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        
+        # Add a set of table entries that the packet should match, and
+        # be forwarded out with the desired dest and source MAC
+        # addresses.
+        print ("Programming P4 tables...")
+        for dst in self.port_ndxs:
+            self.table_add(self.key_ipv4_da_lpm(ip_hosts[dst], 24),
+                        self.act_set_l2ptr(dst))
+            self.table_add(self.key_send_frame(dst), self.act_rewrite_mac(switch_macs[dst]))
+            self.table_add(self.key_mac_da(dst),
+                        self.act_set_bd_dmac_intf(dst, host_macs[dst], dst+1)) # port index 0..3 => dataplane port 1..4
+
+
+        print ("Send packet after configuring tables, verify captured packets stats only...")
+        SnappiPtfUtils.start_capture(self.api, cap.port_names)
+        SnappiPtfUtils.start_traffic(self.api)
+
+        utils.wait_for(
+            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            interval_seconds=2, timeout_seconds=10
+        )
+
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        assert all([stat.frames_rx == tx_count for stat in flow_results]), "Did not receive expected frames" 
 
