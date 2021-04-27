@@ -849,6 +849,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         self.cfg = self.api.config()
         # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
         ports = [self.cfg.ports.port(name='port%d' % (i+1), location='localhost:%d' % (5555+i))[-1] for i in self.port_ndxs]
+        # ports = [self.cfg.ports.port(name='port%d' % (i+1), location='localhost:%d;%d' % (5555,i+1) )[-1] for i in self.port_ndxs]
 
         # configure layer 1 properties
         layer1, = self.cfg.layer1.layer1(name='layer1')

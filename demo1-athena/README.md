@@ -359,7 +359,7 @@ There a several tests inside [demo1-snappi.py](demo1-snappi.py) which you can in
 * [SnappiFwdTestJson](#run-snappifwdtestjson-ptf-test) - this test sends one packet between ports. This test is unique in that it uses a JSON file to define the Athena configuration instead of inline python to manipulate snappi objects.
 * [SnappiFwdTest](#run-snappifwdtest-ptf-test) - same as [SnappiFwdTestJson](#run-snappifwdtest-ptf-test) but uses inline python to manipulate snappi objects.
 * [SnappiFwdTestBidirLpmRange](#run-snappifwdtestbidirlpmrange-ptf-test) - tests bidirectional LPM forwarding between 2 ports, verify stats and full packet contents
-* [SnappiFwdTest4PortMesh](#run-snappifwdtest4portmesh-ptf-test) - tests bidirectional LPM forwarding between 2 ports, verify stats and full packet contents
+* [SnappiFwdTest4PortMesh](#run-snappifwdtest4portmesh-ptf-test) - tests bidirectional LPM forwarding between 2 ports, verify stats only.
 
 Please look at the code and also read [snappi snippets](#snappi-snippets) section below.
 
@@ -427,7 +427,7 @@ This test sends bidirectional traffic between two switch ports, then verifies pa
 </details>
 
 ## Run SnappiFwdTest4PortMesh PTF test
-This test sends 12 flows in a full mesh between 4 ports and verfies the received packet counts are correct. No detailed packet comparisons are performed; instead we rely upon flow-tracking statistics using the [Ixia "instrumentation" header](#about-ixia-header-and-flow-instrumentation). This is a very powerful built-in feature and is essentially the same magic which powers ful-line rate HW-based packet testers.
+This test sends 12 flows in a full mesh between 4 ports and verfies the received packet counts are correct. No detailed packet comparisons are performed; instead we rely upon flow-tracking statistics using the [Ixia "instrumentation" header](#about-ixia-header-and-flow-instrumentation). This is a very powerful built-in feature and is essentially the same magic which powers full-line-rate HW-based packet testers.
 
 ![SnappiFwdTest4PortMesh](SnappiFwdTest4PortMesh.svg)
 
@@ -505,7 +505,7 @@ The result on the right side of the `=` is an iterator as we explained above. To
 
 Another idiom you may encounter is:
 ```
-flow1, flwo2 = self.cfg.flows.flow(name='f1').flow(name='f2')
+flow1, flow2 = self.cfg.flows.flow(name='f1').flow(name='f2')
 ```
 This creates the first flow `f1` using `self.cfg.flows.flow(name='f1')`. The return of this factory methodd is the iterator, to which we append another flow via `.flow(.name='f2')`. The left side `flow1,flow2 =` assigns the two list members returned by the iterator to two variables.
 
@@ -559,7 +559,7 @@ Create a flow of `tx_count` packets of length 100, send at 50 PPS.
         flow.duration.fixed_packets.packets = tx_count
 ```
 
-Get the second layer (IPv4 header), assign the DIP an initial value then auto-increment the least digit if the DIP (to exercise a `/24` subnet).
+Get the second layer (IPv4 header), assign the DIP an initial value then auto-increment the least significant digit of the DIP (to exercise a `/24` subnet).
 ```
         ipv4 = flow.packet[1]
         ipv4.dst.increment.start = ip_hosts[dst]
@@ -597,5 +597,5 @@ def results_ok(api, cfg):
 ```
 The `utils.wait_for()` helper method will keep calling `results_ok()` every `interval_seconds` until it returns `True` or it exceeds `timeout_seconds`.
 
-`results_ok()` reads port and flow statistics maintained by Athena, then tests if the sum of all Tx and Rx stats counters are identical *and* all flows have stopped, signifying the test os over. The demonstrates the powerful flow-aware nature of Athena.
+`results_ok()` reads port and flow statistics maintained by Athena, then tests if the sum of all Tx and Rx stats counters are identical *and* all flows have stopped, signifying the test is over. The demonstrates the powerful, flow-aware nature of Athena.
 
