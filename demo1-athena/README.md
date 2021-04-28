@@ -14,7 +14,7 @@ This project comprises a simple P4 "switch" program which performs LPM Lookup on
 * https://scapy.readthedocs.io
 
 # Introduction
-For background context, expand the section below to see the original content of demo1/readme.md. Proceed to [System Prerequisites](#system-prerequisities) for the "Snappi-fied" instructions.
+For background context, expand the section below to see the original content of demo1/readme.md. Proceed to [System Prerequisites](#system-prerequisities) for the streamlined instructions to demo snappi and Athena.
 
 <summary>Click ""details" arrow to see the original README</summary>
 <details>
@@ -35,6 +35,8 @@ This article describes how to:
 P4Runtime API.  If you are interested in adding table entries to the
 running P4 program using the P4Runtime API instead, see See
 [README-p4runtime.md](README-p4runtime.md).
+
+**Unless otherwise mentioned, steps below take place in the currect directory (the same one as contains this README).**
 
 # Compiling
 
@@ -280,7 +282,7 @@ Due to the DPDK implementation, Athena requires 2 "pinned" CPU cores for each tr
 Please check the CPU core count of your development machine or VM. Try `nproc`. The effective CPU count is proably twice this.
 
 ## Install P4 Development Dependencies
-Run Andy's P4 dev environment installer:
+Run Andy's P4 dev environment installer. This can take up to a few hours.
 ```
 cd p4-guide/bin
 ./install-p4dev-v4.sh # For Ubuntu >= 20.04 only
@@ -321,10 +323,18 @@ You can use `snappi` in other projects! Just add `import snappi` to your Python 
 git clone --recursive https://github.com/open-traffic-generator/athena
 ```
 # Lets do the Demos!
+**Unless otherwise mentioned, steps below take place in the currect directory (the same one as contains this README).**
 
 ## Compile P4 code
 ```
+./compile.sh
+```
+ OR:
+```
 p4c -v --target bmv2 --arch v1model --p4runtime-files demo1.p4_16.p4rt.txt demo1.p4_16.p4
+```
+Here's the typical output:
+```
 running cc -E -C -undef -nostdinc -x assembler-with-cpp -I /usr/local/share/p4c/p4include -o ./demo1.p4_16.p4i demo1.p4_16.p4
 running /usr/local/bin/p4c-bm2-ss -I /usr/local/share/p4c/p4include --p4v=16 --p4runtime-files demo1.p4_16.p4rt.txt -o ./demo1.p4_16.json ./demo1.p4_16.p4i --arch v1model
 ```

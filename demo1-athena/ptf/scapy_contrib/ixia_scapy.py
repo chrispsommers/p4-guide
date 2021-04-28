@@ -29,7 +29,7 @@ class IXIA_FLOAT_INSTRUM(Packet):
 
 
 def guess_ixia_default_payload_class(self, payload):
-    # Look for IXIA if no other layer found
+   """ Look for IXIA signature in payload field """
    b = bytes(payload)
    if len(b) >= 4 and int.from_bytes(b[0:4],'big') == IXIA_SIG1:
       if len(b) >= 12 and int.from_bytes(b[4:8],'big') == IXIA_SIG2 and int.from_bytes(b[8:12],'big') == IXIA_SIG3:
@@ -39,6 +39,7 @@ def guess_ixia_default_payload_class(self, payload):
    else:
         return conf.raw_layer
 
+# Override default payload class to look for Ixia signature first; fallback on normal default
 Packet.default_payload_class = guess_ixia_default_payload_class
 
 

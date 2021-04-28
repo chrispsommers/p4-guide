@@ -365,7 +365,7 @@ class SnappiFwdTest(SnappiFwdTestBase):
 
         # layer1.media = layer1.FIBER
         # configure flow properties
-        flow1 = self.cfg.flows.flow(name='f1')[-1]
+        flow1 = self.cfg.flows.flow(name='port1-2')[-1]
         # flow endpoints
         flow1.tx_rx.port.tx_name = port1.name
         flow1.tx_rx.port.rx_name = port2.name
@@ -557,8 +557,8 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         ip_src_addr='192.168.0.1'
 
         # configure flow1 properties
-        # flow1, flow2 = self.cfg.flows.flow(name='f1').flow(name='f2')
-        flow1, = self.cfg.flows.flow(name='f1')
+        # flow1, flow2 = self.cfg.flows.flow(name='port1-2').flow(name='port2-1') # alternate technique: create multiple flows at once
+        flow1, = self.cfg.flows.flow(name='port1-2')
         # flow endpoints
         flow1.tx_rx.port.tx_name = port1.name
         flow1.tx_rx.port.rx_name = port2.name
@@ -583,8 +583,8 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         tcp.dst_port.value = 80
 
         # flow2 
-        self.cfg.flows.flow(name='f2')
-        flow2 = self.cfg.flows[1] # access with index
+        self.cfg.flows.flow(name='port2-1')
+        flow2 = self.cfg.flows[1] # alternate technique- access with index
         flow2.tx_rx.port.tx_name = port2.name
         flow2.tx_rx.port.rx_name = port1.name
         # configure rate, size, frame count
@@ -705,9 +705,9 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         ip_src_addr='192.168.0.0'
 
         # configure flow1 properties
-        # flow1, flow2 = self.cfg.flows.flow(name='f1').flow(name='f2') # Option 1 - configure multi flows at once
-        # flow1, = self.cfg.flows.flow(name='f1') # Option 2 - configure one flow, take first element
-        flow1 = self.cfg.flows.flow(name='f1')[-1]
+        # flow1, flow2 = self.cfg.flows.flow(name='port1-2').flow(name='port2-1') # Alternate - configure multi flows at once
+        # flow1, = self.cfg.flows.flow(name='port1-2') # Alternate - configure one flow, take first element
+        flow1 = self.cfg.flows.flow(name='port1-2')[-1] # Alternate - obtain last item
         # flow endpoints
         flow1.tx_rx.port.tx_name = port1.name
         flow1.tx_rx.port.rx_name = port2.name
@@ -734,7 +734,7 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         tcp.dst_port.value = 80
 
         # flow2 
-        flow2 = self.cfg.flows.flow(name='f2')[-1] # take last element of returned iterator
+        flow2 = self.cfg.flows.flow(name='port2-1')[-1] # take last element of returned iterator
         flow2.tx_rx.port.tx_name = port2.name
         flow2.tx_rx.port.rx_name = port1.name
         # configure rate, size, frame count
@@ -848,8 +848,8 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
 
         self.cfg = self.api.config()
         # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
-        ports = [self.cfg.ports.port(name='port%d' % (i+1), location='localhost:%d' % (5555+i))[-1] for i in self.port_ndxs]
-        # ports = [self.cfg.ports.port(name='port%d' % (i+1), location='localhost:%d;%d' % (5555,i+1) )[-1] for i in self.port_ndxs]
+        ports = [self.cfg.ports.port(name='port%d' % (i+1), location='localhost:%d' % (5555+i))[-1] for i in self.port_ndxs] # One core per port/direction
+        # ports = [self.cfg.ports.port(name='port%d' % (i+1), location='localhost:%d;%d' % (5555,i+1) )[-1] for i in self.port_ndxs] # 1 core per direction, shared among ports
 
         # configure layer 1 properties
         layer1, = self.cfg.layer1.layer1(name='layer1')
@@ -876,7 +876,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
                     continue # no hairpin switching
 
                 print("Configuring flow[%d]: %s => %s" % (i, ports[src].name, ports[dst].name))
-                flow = self.cfg.flows.flow(name='f%d' %i)[-1]
+                flow = self.cfg.flows.flow(name='port%d-%d' %(src+1, dst+1))[-1]
                 # flow endpoints
                 flow.tx_rx.port.tx_name = ports[src].name
                 flow.tx_rx.port.rx_name = ports[dst].name
