@@ -22,6 +22,8 @@ echo "P is: $P"
 # of getting this mapping other than by telling it on its command
 # line.
 
+./run_athena.sh
+
 ptf \
     --pypath "$P" \
     -i 0@veth1 \
@@ -34,3 +36,5 @@ ptf \
     -i 7@veth15 \
     --test-params="grpcaddr='localhost:9559';p4info='demo1.p4_16.p4rt.txt';config='demo1.p4_16.json'" \
     --test-dir ptf $@
+
+./stop_athena.sh

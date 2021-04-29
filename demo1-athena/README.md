@@ -312,9 +312,9 @@ docker tag <...> athena-controller:latest
 docker tag <...> athena-te:latest
 ```
 ## Install snappi python libraries
+This install snappi and other libraries so `root` can access it in the PTF scripts (which have to run as `root`)
 ```
-# install snappi & clone repo for test suites, useful helper scripts, deployment files, etc.
-python -m pip install --upgrade snappi
+sudo pip3 install snappi dpkt
 ```
 You can use `snappi` in other projects! Just add `import snappi` to your Python programs.
 ## Optional - Install Athena Documentation/Examples
