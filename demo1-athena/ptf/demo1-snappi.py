@@ -17,6 +17,7 @@
 # Andy Fingerhut, andy.fingerhut@gmail.com
 
 # Modifications Copyright 2021 Keysight Technologies
+# Modified FwdTest + added other tests written to use snappi
 
 import logging
 import ptf
@@ -24,14 +25,14 @@ import os
 import time
 from ptf import config
 import ptf.testutils as tu
-import urllib3
 from google.rpc import code_pb2
 
 import base_test as bt
 
-import snappi
-import utils
-import dpkt, sys
+import urllib3    # to suppress insecure warnings for localhost connections w/o certs
+import snappi     # snappi client
+import utils      # snappi utils installed under testlib/
+import dpkt, sys  # for packet capture etc.
 
 # Ixia packets
 sys.path.append(os.path.join(os.path.dirname(__file__), '', 'scapy_contrib'))

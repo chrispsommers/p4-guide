@@ -323,7 +323,7 @@ You can use `snappi` in other projects! Just add `import snappi` to your Python 
 git clone --recursive https://github.com/open-traffic-generator/athena
 ```
 # Lets do the Demos!
-**Unless otherwise mentioned, steps below take place in the currect directory (the same one as contains this README).**
+> **NOTE:** Unless otherwise mentioned, steps below take place in the current directory (the same one as contains this README), e.g. `p4-guide/demo1-athena`.
 
 ## Compile P4 code
 ```
