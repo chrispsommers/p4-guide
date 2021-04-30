@@ -272,23 +272,47 @@ Date:   Fri Sep 20 08:55:10 2019 -0700
 
 
 # System Prerequisites
-## Operating System - Ubuntu 20.04
-
 This was tested using Ubuntu 20.04. Earlier versions of Ubuntu will probably work with some adaptation, but these probably install Python 2.7 by default so some adjustments might be necessary. This is beyond the scope of this tutorial.
 
-## CPU Core Pinning
+Two workflows are presented:
+* Start with fresh Ubuntu and add quite a few baseline P4 tutorial development packages, then add *this* repo, Athena + snappi. This option allows takes a few hours longer to install and build numerous packages like `gRPC`, `p4c`, etc. but it lets you customize your base OS more to your liking.
+* Start with a pre-configured Ubuntu 20.04 VM already containing P4 dev packages + tutorials, then add *this* repo, Athena + snappi. This avoids installig and building many tools but the base OS is a somewhat limited instance of Ubuntu 20.04 including low-resolution graphics drivers, lack of many common packages etc.
+
+## A note on CPU Core Pinning
 Due to the DPDK implementation, Athena requires 2 "pinned" CPU cores for each traffic engine to achieve full performance, plus one more core dedicated as the controller. The PTF tests in this tutorial require 5 and 7 cores, respectively.
 
 Please check the CPU core count of your development machine or VM. Try `nproc`. The effective CPU count is proably twice this.
 
-## Install P4 Development Dependencies
+## OS Option 1 - Start with Fresh Ubuntu 20.04
+### Install this repo
+Prepare your Ubuntu 20.04 environment. We used VirtualBox to install an Ubuntu 20.04 ISO image. Allocate at least 4GB memory and 4 CPU cores if possible.
+```
+git clone <this repo>
+```
+It will create a directory `p4-guide` where all of the subsequent activities will occur.
+### Install P4 Development Dependencies
 Run Andy's P4 dev environment installer. This can take up to a few hours.
 ```
 cd p4-guide/bin
 ./install-p4dev-v4.sh # For Ubuntu >= 20.04 only
 ```
+## OS Option 2 - Start with P4 Tutorial VM
+Download the virtual appliance from https://drive.google.com/file/d/13SwWBEnApknu84fG9otwbL5NC78tut-d/view
+Note, this image was kindly provided by Andy Fingerhut and we cannot guarantee it will always be available.
 
-## Install Docker
+Import this appliance into your virtual machine manager, e.g. VirtualBox. Detailed instructions are beyond the scope of this tutorial.
+
+It's advisable to increase the VM's memory to at least 4GB and allocate at least 4 CPU cores.
+### Install this repo
+```
+git clone <this repo>
+```
+It will create a directory `p4-guide` where all of the subsequent activities will occur.
+
+## Common Install Directions
+These are performed after completing either one of the OS options above.
+
+### Install Docker
 You'll need Docker to run Athena.
 There are various ways to install Docker. Below is but one method. See [Docker.com](https://www.docker.com/get-started).
 ```
@@ -300,7 +324,8 @@ sudo systemctl enable docker
 ```
 **NOTE**: the `usermod` command above lets you avoid needing `sudo` for all `docker` commands. You may need to re-login, or in the case of a VM, restart the OS, in order for it to take effect. You can verify `docker` group membership via the `id` command.
 
-## Install Athena docker images
+
+### Install Athena docker images
 Pull the images from public repository:
 TBD
 ```
@@ -311,13 +336,13 @@ Tag the docker images with shorter names for convenience:
 docker tag <...> athena-controller:latest
 docker tag <...> athena-te:latest
 ```
-## Install snappi python libraries
+### Install snappi python libraries
 This install snappi and other libraries so `root` can access it in the PTF scripts (which have to run as `root`)
 ```
 sudo pip3 install snappi dpkt
 ```
 You can use `snappi` in other projects! Just add `import snappi` to your Python programs.
-## Optional - Install Athena Documentation/Examples
+### Optional - Install Athena Documentation/Examples
 `cd` to a suitable directory to install these resources for use outside this tutorial.
 ```
 git clone --recursive https://github.com/open-traffic-generator/athena
