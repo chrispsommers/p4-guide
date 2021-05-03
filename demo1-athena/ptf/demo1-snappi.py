@@ -843,7 +843,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
     @bt.autocleanup
     def runTest(self):
         # Define # ports, indices, names - will reuse a lot
-        self.NUMPORTS=4
+        self.NUMPORTS=2
         self.port_ndxs=list(range(self.NUMPORTS))
         port_names = ['port%d' % (i+1) for i in self.port_ndxs]
 
@@ -862,7 +862,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         cap.port_names = port_names
         cap.format = 'pcap'
 
-        tx_count = 255
+        tx_count = 25
 
         # Header values used to define packet contents, will be reused in P4 table entries
         host_macs=['ee:00:00:00:00:%02x' % (i+1) for i in self.port_ndxs]
@@ -949,5 +949,35 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         )
 
         port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        assert all([stat.frames_rx == tx_count for stat in flow_results]), "Did not receive expected frames" 
+        print ("Verifying capture statistics...")
 
+        # Verify each port transmits packets to every other port
+        # This form uses a compact list comprehension to perform test
+        assert all([stat.frames_tx == tx_count*(self.NUMPORTS-1) for stat in port_results]), "Didn't send correct number of packets to every port"
+
+        # Verify rx port stats match tx port stats
+        # For fun, we'll use a generator method to compose the detailed error message
+        assert all([stat.frames_rx == stat.frames_tx for stat in port_results]), [msg for msg in self.test_mismmatched_port_tx_rx_frames(port_results)]
+
+        # Verify rx flow stats match tx flow stats
+        assert all([stat.frames_rx == tx_count for stat in flow_results]), "Flow stats Rx frames != tx_count" 
+
+    def test_mismmatched_port_tx_rx_frames(self, port_results):
+        """ Test for port frame counts, return error message if fails
+        generator returns successive strings describing the failure details
+        """
+        msg='Tx/Rx Frames mismatched'
+        yield msg
+        result=True
+        for stat in port_results:
+            if stat.frames_rx != stat.frames_tx:
+                result=False
+                # msg=msg + "Port %s tx_frames=%d rx_frames=%d; " % (stat.name, stat.frames_tx, stat.frames_rx)
+                yield "Port %s tx_frames=%d rx_frames=%d; " % (stat.name, stat.frames_tx, stat.frames_rx)
+                captures = utils.get_all_captures(self.api, self.cfg)
+                # scapy dump packets of mismatched rx stats
+                i = 0
+                for pktbytes in captures[stat.name]:
+                    p=Ether(bytes(pktbytes))
+                    yield "\n%s[%d]: %s" % (stat.name, i, p.__repr__())
+        return result

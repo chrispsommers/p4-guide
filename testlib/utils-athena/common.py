@@ -537,15 +537,17 @@ def print_stats(port_stats=None, flow_stats=None, clear_screen=None):
         print("")
 
     if flow_stats:
-        row_format = "{:>20}" * 7
-        border = '-' * (20 * 7 + 5)
+        ncols = 5
+        row_format = "{:>20}" * ncols
+        border = '-' * (20 * ncols + 5)
         print('Flow Stats')
         print(border)
-        print(row_format.format('Flow', 'Rx Frames', 'Rx Bytes', 'Loss',
-        'Min Latency (ns)', 'Max latency (ns)', 'Avg Latency (ns)')) # noqa
+        print(row_format.format('Flow', 'Rx Frames', 'Rx Bytes',
+        # 'Loss', 'Min Latency (ns)',
+        'Max latency (ns)', 'Avg Latency (ns)')) # noqa
         for stat in flow_stats:
             print(row_format.format(stat.name, stat.frames_rx, stat.bytes_rx,
-                                    stat.loss, stat.min_latency_ns,
+                                    # stat.loss, stat.min_latency_ns,
                                     stat.max_latency_ns, stat.avg_latency_ns))
         print(border)
         print("")
