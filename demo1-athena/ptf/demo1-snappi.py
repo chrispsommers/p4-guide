@@ -47,6 +47,15 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
+def sleep_dots(secs,msg):
+    secs = int(secs)
+    print ("Sleep %d secs %s" % (secs,msg)),
+    for i in range(secs,0,-1):
+        print ("%d..." % i)
+        sys.stdout.flush()
+        time.sleep(1)
+    print
+
 class Demo1TestBase(bt.P4RuntimeTest):
     def setUp(self):
         bt.P4RuntimeTest.setUp(self)
@@ -677,6 +686,7 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
     def runTest(self):
         # Config method 2 - use inline snappi code to configure flows
         self.cfg = self.api.config()
+        self.NUMPORTS=2
         # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
         port1, port2 = (
             self.cfg.ports
@@ -694,8 +704,11 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         cap.port_names = [port1.name, port2.name]
         cap.format = 'pcap'
 
-        tx_count = 512
-        compare_count = 256
+        self.tx_count = 512
+        self.compare_count = 256
+
+        # note - empirical time delay, may differ on each system
+        delay=self.tx_count*self.NUMPORTS/100
 
         # Header values used to define packet contents, will be reused in P4 table entries
         in_dmac = 'ee:30:ca:9d:1e:00'
@@ -715,7 +728,7 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         # configure rate, size, frame count
         flow1.size.fixed = 100
         flow1.rate.pps = 100
-        flow1.duration.fixed_packets.packets = tx_count
+        flow1.duration.fixed_packets.packets = self.tx_count
         # configure protocol headers with defaults fields
         flow1.packet.ethernet().ipv4().tcp()
 
@@ -726,7 +739,7 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         ipv4 = flow1.packet[1]
         ipv4.dst.increment.start = ip_dst_addr
         ipv4.dst.increment.step = '0.0.0.1'
-        ipv4.dst.increment.count = tx_count
+        ipv4.dst.increment.count = self.tx_count
         ipv4.src.value = ip_src_addr
         ipv4.time_to_live.value = 64
 
@@ -741,7 +754,7 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         # configure rate, size, frame count
         flow2.size.fixed = 100
         flow2.rate.pps = 100
-        flow2.duration.fixed_packets.packets = tx_count
+        flow2.duration.fixed_packets.packets = self.tx_count
         # configure protocol headers with defaults fields
         flow2.packet.ethernet().ipv4().tcp()
 
@@ -752,7 +765,7 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         ipv4 = flow2.packet[1]
         ipv4.dst.increment.start = ip_src_addr
         ipv4.dst.increment.step = '0.0.0.1'
-        ipv4.dst.increment.count = tx_count
+        ipv4.dst.increment.count = self.tx_count
         ipv4.src.value = ip_dst_addr
         ipv4.time_to_live.value = 64
 
@@ -767,7 +780,7 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         print ("Send packet prior to configuring tables, verify packets are dropped...")
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
         SnappiPtfUtils.start_traffic(self.api)
-        time.sleep(tx_count/100)
+        sleep_dots(delay, "Wait for P4 pipeline to process all packets")
 
         port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
         # Snappi flow-based test for dropped packets:
@@ -803,30 +816,30 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
 
         # Forward direction - in port2, out port1
         exp_pkts = [ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
-                                ip_src=ip_src_addr, ip_dst='10.1.0.%d' % i, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00') for i in range(compare_count)]
+                                ip_src=ip_src_addr, ip_dst='10.1.0.%d' % i, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00') for i in range(self.compare_count)]
         exp_pkts = [Ether(exp_pkts[i].build()) for i in range(len(exp_pkts))] # force recalc chksum, len,etc.
 
         print ("Send packet after configuring tables, verify captured packets byte-by-byte...")
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
         SnappiPtfUtils.start_traffic(self.api)
 
-        utils.get_all_stats(self.api, print_output=True)
-
+        sleep_dots(delay, "Wait for P4 pipeline to process all packets")
 
         utils.wait_for(
             lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
             interval_seconds=2, timeout_seconds=10
         )
 
+        utils.get_all_stats(self.api, print_output=True)
         port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        assert all([stat.frames_rx == tx_count/2 for stat in flow_results]), "Did not receive expected %d frames on all flows" % tx_count/2
+        assert all([stat.frames_rx == self.tx_count/2 for stat in flow_results]), "Did not receive expected %d frames on all flows" % self.tx_count/2
 
         SnappiPtfUtils.verify_captures_on_port(self.api, exp_pkts, 'port2', self.pkt_compare_func)
 
         # Reverse direction - in port2, out port1
         exp_pkts2 = [Ether(ixia_tcp_packet_floating_instrum(eth_src=in_smac, eth_dst=in_dmac, pktlen=96,
                                 ip_src=ip_dst_addr, ip_dst='192.168.0.%d' % i, ip_ttl=63, tcp_window=0,
-                                tcp_sport=80, tcp_dport=1234)/Padding('\x00\x00\x00\x00')) for i in range(compare_count)]
+                                tcp_sport=80, tcp_dport=1234)/Padding('\x00\x00\x00\x00')) for i in range(self.compare_count)]
         exp_pkts2 = [Ether(exp_pkts2[i].build()) for i in range(len(exp_pkts2))] # force recalc chksum, len,etc.
         
         SnappiPtfUtils.verify_captures_on_port(self.api, exp_pkts2, 'port1', self.pkt_compare_func)
@@ -843,7 +856,8 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
     @bt.autocleanup
     def runTest(self):
         # Define # ports, indices, names - will reuse a lot
-        self.NUMPORTS=2
+        self.NUMPORTS=4
+        self.tx_count = 255
         self.port_ndxs=list(range(self.NUMPORTS))
         port_names = ['port%d' % (i+1) for i in self.port_ndxs]
 
@@ -862,13 +876,15 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         cap.port_names = port_names
         cap.format = 'pcap'
 
-        tx_count = 25
+        # note - empirical time delay, may differ on each system
+        delay=self.tx_count*self.NUMPORTS/100
 
         # Header values used to define packet contents, will be reused in P4 table entries
+        self.subnet_pattern = '192.168.%d.%d'
         host_macs=['ee:00:00:00:00:%02x' % (i+1) for i in self.port_ndxs]
         switch_macs=['dd:00:00:00:00:%02x' % (i+1) for i in self.port_ndxs]
-        ip_subnets=['192.168.%d.0' % (i+1) for i in self.port_ndxs]
-        ip_hosts=['192.168.%d.1' % (i+1) for i in self.port_ndxs]
+        ip_subnets=[self.subnet_pattern % ((i+1),0) for i in self.port_ndxs]
+        ip_hosts=[self.subnet_pattern % ((i+1),1) for i in self.port_ndxs]
 
         i = 0
         for src in self.port_ndxs:
@@ -884,7 +900,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
                 # configure rate, size, frame count
                 flow.size.fixed = 100
                 flow.rate.pps = 50
-                flow.duration.fixed_packets.packets = tx_count
+                flow.duration.fixed_packets.packets = self.tx_count
                 # configure protocol headers with defaults fields
                 flow.packet.ethernet().ipv4().tcp()
 
@@ -895,7 +911,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
                 ipv4 = flow.packet[1]
                 ipv4.dst.increment.start = ip_hosts[dst]
                 ipv4.dst.increment.step = '0.0.0.1'
-                ipv4.dst.increment.count = tx_count
+                ipv4.dst.increment.count = self.tx_count
                 ipv4.src.value = ip_hosts[src]
                 ipv4.time_to_live.value = 64
 
@@ -916,7 +932,8 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         print ("Send packet prior to configuring tables, verify packets are dropped...")
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
         SnappiPtfUtils.start_traffic(self.api)
-        time.sleep(tx_count/100)
+
+        sleep_dots(delay, "Wait for P4 pipeline to process all packets")
 
         # Snappi flow-based test for dropped packets:
         port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
@@ -943,41 +960,94 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
         SnappiPtfUtils.start_traffic(self.api)
 
+        sleep_dots(delay, "Wait for P4 pipeline to process all packets")
         utils.wait_for(
             lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
             interval_seconds=2, timeout_seconds=10
         )
 
         port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        captures = utils.get_all_captures(self.api, self.cfg)
         print ("Verifying capture statistics...")
 
-        # Verify each port transmits packets to every other port
         # This form uses a compact list comprehension to perform test
-        assert all([stat.frames_tx == tx_count*(self.NUMPORTS-1) for stat in port_results]), "Didn't send correct number of packets to every port"
+        print ("Verify each port transmits %d*%d = %d packets..." % (self.tx_count, self.NUMPORTS-1, self.tx_count*(self.NUMPORTS-1)))
+        assert all([stat.frames_tx == self.tx_count*(self.NUMPORTS-1) for stat in port_results]), "Didn't send correct number of packets to every port"
 
-        # Verify rx port stats match tx port stats
         # For fun, we'll use a generator method to compose the detailed error message
-        assert all([stat.frames_rx == stat.frames_tx for stat in port_results]), [msg for msg in self.test_mismmatched_port_tx_rx_frames(port_results)]
+        print ("Verify tx & rx port stats are identical...")
+        assert all([stat.frames_rx == stat.frames_tx for stat in port_results]), [msg for msg in self.test_mismmatched_port_tx_rx_frames(port_results, captures)]
 
-        # Verify rx flow stats match tx flow stats
-        assert all([stat.frames_rx == tx_count for stat in flow_results]), "Flow stats Rx frames != tx_count" 
+        print ("Verify each Rx flow received %d packets..." % self.tx_count)
+        assert all([stat.frames_rx == self.tx_count for stat in flow_results]), "Flow stats Rx frames != self.tx_count" 
 
-    def test_mismmatched_port_tx_rx_frames(self, port_results):
-        """ Test for port frame counts, return error message if fails
-        generator returns successive strings describing the failure details
+        print ("Verify complete IP address mesh was received...")
+        error_msgs = [msg for msg in self.test_port_mesh_ip_addrs(captures)]
+        assert len(error_msgs) == 0, error_msgs
+
+
+    def test_mismmatched_port_tx_rx_frames(self, port_results, captures):
+        """ Test for port frame counts, return error message if fails.
+        As a generator it yields successive strings describing the failure details
         """
-        msg='Tx/Rx Frames mismatched'
+        msg='Tx/Rx Frame counts'
         yield msg
         result=True
         for stat in port_results:
             if stat.frames_rx != stat.frames_tx:
                 result=False
                 # msg=msg + "Port %s tx_frames=%d rx_frames=%d; " % (stat.name, stat.frames_tx, stat.frames_rx)
-                yield "Port %s tx_frames=%d rx_frames=%d; " % (stat.name, stat.frames_tx, stat.frames_rx)
-                captures = utils.get_all_captures(self.api, self.cfg)
+                yield "; Port %s tx_frames=%d rx_frames=%d" % (stat.name, stat.frames_tx, stat.frames_rx)
                 # scapy dump packets of mismatched rx stats
-                i = 0
-                for pktbytes in captures[stat.name]:
-                    p=Ether(bytes(pktbytes))
-                    yield "\n%s[%d]: %s" % (stat.name, i, p.__repr__())
+                # i = 0
+                # for pktbytes in captures[stat.name]:
+                #     p=Ether(bytes(pktbytes))
+                #     yield "\n%s[%d]: %s" % (stat.name, i, p.__repr__())
         return result
+
+    def test_port_mesh_ip_addrs(self, captures):
+        """ Test that captures contain expected mesh of src/dst IP address.
+        As a generator it yields successive strings describing the failure details
+        """
+
+        # Make a map of all IP src/dst pairs and count occurrences
+        # use nested dicts to construct a 2D assoc array
+        # map[s][d] represented as: each smap{src addr} contains dmap{dst addr}
+        smap={}
+        for port, pkt_records in captures.items():
+            i = 0
+            for pkt_bytes in pkt_records:
+                # Use scapy to convert string of chars into a pkt
+                pkt = Ether(bytes(pkt_bytes))
+                # yield "Port %s [%d]: %s" % (port, i, pkt.__repr__() )
+                # i+=1
+                # extract IP addresses
+                sip = pkt[IP].src
+                dip = pkt[IP].dst
+            
+                if sip not in smap:
+                    # create nested map
+                    smap[sip] = {}
+                dmap = smap[sip] # fetch nested map
+                if dip not in dmap:
+                    dmap[dip] = 1 # create first entry
+                else:
+                    dmap[dip] += 1 # increment existing
+        # Detect repeats if src,dst; does not catch missing entries, see below
+        for sip,dmap in smap.items():
+            for dip,count in dmap.items():
+                if count != 1:
+                    yield "Port %s src %s => dst %s: %d times" % (port, sip, dip, count)
+
+        # Verify each mesh combo appears in map; we already checked all counts must = 1
+        for src_port in self.port_ndxs:
+            for dst_port in self.port_ndxs:
+                if src_port == dst_port:
+                    continue # no hairpin switching
+                for i in range(self.tx_count):
+                    sip=self.subnet_pattern % (src_port+1,1)
+                    dip=self.subnet_pattern % (dst_port+1, i+1)
+                    if sip not in smap or dip not in smap[sip]:
+                        yield "Mesh is missing src=%s=>dst=%s" % (sip, dip)
+                        
+        return

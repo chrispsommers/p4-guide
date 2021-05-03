@@ -474,13 +474,17 @@ This test sends 12 flows in a full mesh between 4 ports and verfies the received
 <summary>Click the arrow to expand</summary>
 <details>
 
-* Configure Athena for 12 traffic flows, into `veth2`, `veth4`, `veth6` and `veth8` (dataplane ports 1-4 respectively in the P4 code). the 12 flows comprise a full-meash, full-duplex test of port forwarding. Each flow will send 256 packets into its port, incrementing the last byte of the DIP from 0 to 256. Each flow will emit packets at 50 packets per second. We wait until the received packet counts match the extecped values on all flows (or timeout waiting).
+* Configure Athena for 12 traffic flows, into `veth2`, `veth4`, `veth6` and `veth8` (dataplane ports 1-4 respectively in the P4 code). The 12 flows comprise a full-meash, full-duplex test of port forwarding. Each flow will send 256 packets into its port, incrementing the last byte of the DIP from 1 to 256. Each flow will emit packets at 50 packets per second. We wait until the received packet counts match the extecped values on all flows (or timeout waiting).
 * Configure Athena to capture all the return traffic
 * Start the traffic flows and capture the results
-* Verify no packets were captured because the P4 dataplane forwawrding tables have not been programmed: the default action is `drop`.
+* Verify no packets were captured because the P4 dataplane forwarding tables have not been programmed: the default action is `drop`.
 * Configure the P4 tables to match on the DIPs as configured in the traffic flows and forward to the correct egress ports, also performing MAC rewrite.
 * Start traffic flow a second time and capture everything. We wait until the received packet counts match the expected values on all flows (or timeout waiting).
-* Verify the captured results has the correct number of packets for each flow.
+* Verify a number of expectations:
+  * Each port transmits the correct count of packets ( 3*255, i.e. 255 packets to each of the other ports in the mesh)
+  * Port Tx stats = port Rx stats = 3*255
+  * The captured results has the correct number of packets for each flow (same as tranmitted to each flow)
+  * Examine each captured packet, extract IP src and dest address, and confirm exactly one packet was sent between each "host" and each of 255 "destinations" on the other port's subnets.
 </details>
 
 ### Run the Test
