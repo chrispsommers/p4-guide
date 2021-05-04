@@ -56,6 +56,63 @@ def sleep_dots(secs,msg):
         time.sleep(1)
     print
 
+def results_ok(api, cfg, csv_dir=None):
+    """
+    Returns true if stats are as expected, False otherwise.
+    """
+    port_results, flow_results = utils.get_all_stats(api, print_output=False)
+    if csv_dir is not None:
+        utils.print_csv(csv_dir, port_results, flow_results)
+
+    if not all([f.transmit == 'stopped' for f in flow_results]):
+        return False # Fast fail if not even stopped yet
+
+    port_tx = sum([p.frames_tx for p in port_results if p.name == 'tx'])
+    port_rx = sum([p.frames_rx for p in port_results if p.name == 'rx'])
+
+    return port_tx == port_rx
+
+def stats_settled(api, cfg, previous):
+    """ Returns true if all tx flows stopped and current port stats = previous
+        initialize previous with {} prior to calling in wait_for() lambda loop
+    """
+    port_results, flow_results = utils.get_all_stats(api, print_output=False)
+    if 'port' not in previous:
+        previous['port'] = None
+    prev_port_results = previous['port']
+    if 'flow' not in previous:
+        previous['flow'] = None
+    prev_flow_results = previous['flow']
+    
+    result = all([f.transmit == 'stopped' for f in flow_results])
+    if not result:
+        print ("Waiting for flows to stop...")
+    else:
+        if not (prev_port_results and prev_flow_results):
+             result = False
+             print ("prev_port=%s, prev_flow=%s" % (prev_port_results, prev_flow_results))
+        # compare curr with prev
+        for stat in port_results:
+            prev_stat = [item for item in prev_port_results if item.name == stat.name]
+            if prev_stat is None:
+                print ("Port %s not in prev_port_results:\n%s" % (stat.name, prev_port_results))
+                result = False
+                break
+            prev_stat = prev_stat[0]
+            print ("\nPort %s previous:\n===============\n%s" % (prev_stat.name, prev_stat))
+            print ("\nPort %s current:\n===============\n%s" % (stat.name, stat))
+            if stat.frames_tx != prev_stat.frames_tx:
+                result = False
+                break
+            if stat.frames_rx != prev_stat.frames_rx:
+                result = False
+                break
+        
+    # store in caller's "previous" dict
+    previous['port'] = port_results
+    previous['flow'] = flow_results
+    return result
+
 class Demo1TestBase(bt.P4RuntimeTest):
     def setUp(self):
         bt.P4RuntimeTest.setUp(self)
@@ -259,20 +316,6 @@ class SnappiPtfUtils():
             i+= 1
         return True
 
-
-def results_ok(api, cfg, csv_dir=None):
-    """
-    Returns true if stats are as expected, false otherwise.
-    """
-    port_results, flow_results = utils.get_all_stats(api, print_output=False)
-    if csv_dir is not None:
-        utils.print_csv(csv_dir, port_results, flow_results)
-    port_tx = sum([p.frames_tx for p in port_results if p.name == 'tx'])
-    port_rx = sum([p.frames_rx for p in port_results if p.name == 'rx'])
-
-    return port_tx == port_rx and all(
-        [f.transmit == 'stopped' for f in flow_results]
-    )
 
 class SnappiFwdTestBase(Demo1Test):
     def setUp(self):
@@ -921,28 +964,27 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
 
                 i+=1
 
-        print(self.cfg)
-
         # push configuration
-        print ("Applying snappi config:\n%s" % self.cfg)
+        # print ("Applying snappi config:\n%s" % self.cfg)
+        print ("Applying snappi config...")
         res = self.api.set_config(self.cfg)
         assert len(res.errors) == 0, str(res.errors)
         print ("Applied snappi config: OK")
 
-        print ("Send packet prior to configuring tables, verify packets are dropped...")
-        SnappiPtfUtils.start_capture(self.api, cap.port_names)
-        SnappiPtfUtils.start_traffic(self.api)
+        # print ("Send packet prior to configuring tables, verify packets are dropped...")
+        # SnappiPtfUtils.start_capture(self.api, cap.port_names)
+        # SnappiPtfUtils.start_traffic(self.api)
 
-        sleep_dots(delay, "Wait for P4 pipeline to process all packets")
+        # sleep_dots(delay, "Wait for P4 pipeline to process all packets")
 
-        # Snappi flow-based test for dropped packets:
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
-        # Traditional PTF port-based test for dropped packets:
-        assert(SnappiPtfUtils.verify_no_other_packets(self.api, cap.port_names))
+        # # Snappi flow-based test for dropped packets:
+        # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # # Traditional PTF port-based test for dropped packets:
+        # assert(SnappiPtfUtils.verify_no_other_packets(self.api, cap.port_names))
 
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=False)
-        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # port_results, flow_results = utils.get_all_stats(self.api, print_output=False)
+        # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         
         # Add a set of table entries that the packet should match, and
         # be forwarded out with the desired dest and source MAC
@@ -960,11 +1002,19 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
         SnappiPtfUtils.start_traffic(self.api)
 
-        sleep_dots(delay, "Wait for P4 pipeline to process all packets")
+        # sleep_dots(delay, "Wait for P4 pipeline to process all packets")
+        # utils.wait_for(
+        #     lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+        #     interval_seconds=2, timeout_seconds=10
+        # )
+
+        # define storage for comparing stats in wait_for()
+        self.previous = {}
         utils.wait_for(
-            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
-            interval_seconds=2, timeout_seconds=10
+            lambda: stats_settled(self.api, self.cfg, self.previous), 'stats to settle',
+            interval_seconds=2, timeout_seconds=20
         )
+        
 
         port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
         captures = utils.get_all_captures(self.api, self.cfg)
@@ -976,7 +1026,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
 
         # For fun, we'll use a generator method to compose the detailed error message
         print ("Verify tx & rx port stats are identical...")
-        assert all([stat.frames_rx == stat.frames_tx for stat in port_results]), [msg for msg in self.test_mismmatched_port_tx_rx_frames(port_results, captures)]
+        assert all([stat.frames_rx == stat.frames_tx for stat in port_results]), [msg for msg in self.test_mismmatched_port_tx_frames_rx(port_results, captures)]
 
         print ("Verify each Rx flow received %d packets..." % self.tx_count)
         assert all([stat.frames_rx == self.tx_count for stat in flow_results]), "Flow stats Rx frames != self.tx_count" 
@@ -986,7 +1036,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         assert len(error_msgs) == 0, error_msgs
 
 
-    def test_mismmatched_port_tx_rx_frames(self, port_results, captures):
+    def test_mismmatched_port_tx_frames_rx(self, port_results, captures):
         """ Test for port frame counts, return error message if fails.
         As a generator it yields successive strings describing the failure details
         """
@@ -996,8 +1046,8 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         for stat in port_results:
             if stat.frames_rx != stat.frames_tx:
                 result=False
-                # msg=msg + "Port %s tx_frames=%d rx_frames=%d; " % (stat.name, stat.frames_tx, stat.frames_rx)
-                yield "; Port %s tx_frames=%d rx_frames=%d" % (stat.name, stat.frames_tx, stat.frames_rx)
+                # msg=msg + "Port %s frames_tx=%d frames_rx=%d; " % (stat.name, stat.frames_tx, stat.frames_rx)
+                yield "; Port %s frames_tx=%d frames_rx=%d" % (stat.name, stat.frames_tx, stat.frames_rx)
                 # scapy dump packets of mismatched rx stats
                 # i = 0
                 # for pktbytes in captures[stat.name]:
