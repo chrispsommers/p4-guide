@@ -36,15 +36,16 @@ output that running a successful PTF test looks like.
 See P4 program and PTF test in ptf-tests/packetinout directory.
 
 
+# P4 register array access, with read/write from controller via PacketOut/In messages
+
+See P4 program and PTF test in ptf-tests/registeraccess directory.
+
+
 # Things not demonstrated yet
 
 + idle timeout option for tables
   + verify IdleTimeoutNotification message is sent by data plane to
     controller with expected contents
-+ Nothing to configure from controller for these v1model externs
-  + hash
-  + random
-  + Checksum16
 + mirror sessions
   + configure from controller
   + verify changes in data packet processing as a result of controller changes
@@ -68,6 +69,8 @@ See P4 program and PTF test in ptf-tests/packetinout directory.
 + register
   + PI does not yet support reading or writing register arrays.  That
     must be implemented before such a PTF test can be successfully run.
+  + There _is_ a demo program with PTF test that does register read/write
+    from controller using PacketOut and PacketIn messages instead.
 + action profile extern - configure and forwarding packets
 + action selector extern - configure and forwarding packets
   + 1 element in a group
@@ -79,3 +82,7 @@ See P4 program and PTF test in ptf-tests/packetinout directory.
     + using watch port feature and having a watched port go down.  Not
       sure if there is even a way with simple_switch_grpc to make a
       port go down?
++ There is nothing to configure from controller for these v1model externs:
+  + hash
+  + random
+  + Checksum16
