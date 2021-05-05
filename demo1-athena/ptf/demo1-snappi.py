@@ -894,9 +894,9 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
 
 class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
     """
-    Send 512 packets in each direction with incr. DIP
+    Send 255 packets over every mesh connection of 4 ports with incr. DIP (12 flows)
     LPM set to mask 8 LSBs
-    Confirm only 256 packets arrived on each output
+    Confirm each flow receives all packets.
     """
     def setUp(self):
         SnappiFwdTestBase.setUp(self)
