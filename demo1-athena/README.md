@@ -617,28 +617,66 @@ This snippet starts a capture, then starts traffic flows.
 SnappiPtfUtils.start_capture(self.api, [capture_port_name])
 SnappiPtfUtils.start_traffic(self.api)
 ```
-The part which follows waits until all captures are done or quits after a timeout:
+The part which follows waits until all flows have stopped and stats have settled, or quits after a timeout:
 ```
+# define storage for comparing stats in wait_for()
+self.prev_stats = {}
 utils.wait_for(
-    lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
-    interval_seconds=2, timeout_seconds=10
+    lambda: stats_settled(self.api, self.cfg, self.prev_stats), 'stats to settle',
+    interval_seconds=2, timeout_seconds=20
 )
 ```
 The most intersting part is the callback function invoked via `lambda` above:
 ```
-def results_ok(api, cfg):
+def stats_settled(api, cfg, prev_stats):
+    """ Returns true if all tx flows are stopped and stats have "settled."
+        Settled means current tx/rx packet counts == previous counts.
+        Call this after you've stopped your flows.
+        Expecially useful in cases where the dataplane takes a while to process all the packets
+        you've already sent and you want to analyze final, stable values.
+        api - the snappi API handle
+        cfg - the configuraiton objects (not used currently)
+        prev_stats - caller-allocated storage for previous stats sample; initialize
+                     with {} prior to calling in wait_for() lambda loop
     """
-    Returns true if stats are as expected, false otherwise.
-    """
-    port_results, flow_results = utils.get_all_stats(api)
-    port_tx = sum([p.frames_tx for p in port_results if p.name == 'tx'])
-    port_rx = sum([p.frames_rx for p in port_results if p.name == 'rx'])
+    port_results, flow_results = utils.get_all_stats(api, print_output=False)
 
-    return port_tx == port_rx and all(
-        [f.transmit == 'stopped' for f in flow_results]
-    )
+    if 'port' not in prev_stats:
+        prev_stats['port'] = None
+    prev_port_results = prev_stats['port']
+    if 'flow' not in prev_stats:
+        prev_stats['flow'] = None
+    prev_flow_results = prev_stats['flow']
+    
+    result = all([f.transmit == 'stopped' for f in flow_results])
+    if not result:
+        print ("Waiting for flows to stop...")
+    else:
+        if not (prev_port_results and prev_flow_results):
+             result = False # Need to get first results to have a "previous"
+        else:
+            # compare curr with prev
+            for stat in port_results:
+                prev_stat = [item for item in prev_port_results if item.name == stat.name]
+                if prev_stat is None:
+                    result = False # Previous has less items than current, i.e. it was incomplete
+                    break
+                prev_stat = prev_stat[0]
+                if stat.frames_tx != prev_stat.frames_tx:
+                    result = False # tx not settled yet
+                    break
+                if stat.frames_rx != prev_stat.frames_rx:
+                    result = False # rx not settled yet
+                    break
+        
+    # store in caller's "prev_stats" dict
+    prev_stats['port'] = port_results
+    prev_stats['flow'] = flow_results
+    return result
 ```
-The `utils.wait_for()` helper method will keep calling `results_ok()` every `interval_seconds` until it returns `True` or it exceeds `timeout_seconds`.
+The `utils.wait_for()` helper method will keep calling `stats_settled()` every `interval_seconds` until it returns `True` or it exceeds `timeout_seconds`.
 
-`results_ok()` reads port and flow statistics maintained by Athena, then tests if the sum of all Tx and Rx stats counters are identical *and* all flows have stopped, signifying the test is over. The demonstrates the powerful, flow-aware nature of Athena.
+`stats_settled()` detects that all flows have stopped transmitting, and that the statistics counters have stopped changing in between samples. This gives time for the P4 bmv2 pipeline, which is relatively slow, to process all the packets before doing our final test assertions. This is an example of synchronizing the script state to the device under test.
+
+You can a similar function called `results_ok()` in the code. It uses different criteria for the final test results ( sum of all Rx flow counters == sum of all Tx flow counters).
 

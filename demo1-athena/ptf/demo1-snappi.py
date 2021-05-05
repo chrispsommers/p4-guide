@@ -168,6 +168,7 @@ class Demo1Test(Demo1TestBase):
 ######################## snappi tests #########################
 
 def print_pkts_side_by_side(p1,p2):
+    """ Utility to print out two packets' contents as side-by-side bytes"""
     exl=len(p1)
     bex=bytes(p1)
     rxl=len(p2)
@@ -484,9 +485,6 @@ class SnappiFwdTest(SnappiFwdTestBase):
                        self.act_set_bd_dmac_intf(bd, out_dmac, eg_port))
         self.table_add(self.key_send_frame(bd), self.act_rewrite_mac(out_smac))
 
-        # Config, capture and start all in one
-        # utils.common.start_traffic(self.api, self.cfg) - error, port 1 not a capture port
-
         exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
                                 ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
         # Force field updates (chksums, len, etc.)
@@ -514,7 +512,7 @@ class SnappiFwdTestJsonBidir(SnappiFwdTestBase):
 
         # Config method 1 - use config file to configure flows, merge in settings.json
         # Note this method requires xternal JSON file be in sync with the P4 table programming values
-        # and packet compare values defined below, which could be a maintenance burden
+        # and packet compare values defined below, which could be a maintenance liability if they drift.
         self.cfg = utils.common.load_test_config(
             self.api, 'demo1-athena-packet-config-bidir.json', apply_settings=True
         )
@@ -604,7 +602,6 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         cap = self.cfg.captures.capture(name='c1')[0]
         cap.port_names = [port1.name, port2.name]
         cap.format = 'pcap'
-
 
         # Header values used to define packet contents, will be reused in P4 table entries
         in_dmac = 'ee:30:ca:9d:1e:00'
@@ -724,6 +721,8 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
 class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
     """
     Send 512 packets in each direction with incr. DIP
+    packets 257-512 roll over into next /24 subnet
+    e.g. from 10.1.0.x to 10.1.1.x where x is 0..255
     LPM set to mask 8 LSBs
     Confirm only 256 packets arrived on each output
     """
@@ -1016,21 +1015,22 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         
 
         port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        captures = utils.get_all_captures(self.api, self.cfg)
-        print ("Verifying capture statistics...")
 
+        print ("Verifying port & flow statistics...")
         # This form uses a compact list comprehension to perform test
-        print ("Verify each port transmits %d*%d = %d packets..." % (self.tx_count, self.NUMPORTS-1, self.tx_count*(self.NUMPORTS-1)))
+        print (" - Verify each port transmits %d*%d = %d packets..." % (self.tx_count, self.NUMPORTS-1, self.tx_count*(self.NUMPORTS-1)))
         assert all([stat.frames_tx == self.tx_count*(self.NUMPORTS-1) for stat in port_results]), "Didn't send correct number of packets to every port"
 
         # For fun, we'll use a generator method to compose the detailed error message
-        print ("Verify tx & rx port stats are identical...")
+        print (" - Verify tx & rx port stats are identical...")
         assert all([stat.frames_rx == stat.frames_tx for stat in port_results]), [msg for msg in self.test_mismmatched_port_tx_frames_rx(port_results, captures)]
 
-        print ("Verify each Rx flow received %d packets..." % self.tx_count)
+        print (" - Verify each Rx flow received %d packets..." % self.tx_count)
         assert all([stat.frames_rx == self.tx_count for stat in flow_results]), "Flow stats Rx frames != self.tx_count" 
 
-        print ("Verify complete IP address mesh was received...")
+        print ("Verifying captured packet contents...")
+        captures = utils.get_all_captures(self.api, self.cfg)
+        print (" - Verify complete IP address mesh was received...")
         error_msgs = [msg for msg in self.test_port_mesh_ip_addrs(captures)]
         assert len(error_msgs) == 0, error_msgs
 
