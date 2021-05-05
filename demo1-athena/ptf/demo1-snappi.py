@@ -72,45 +72,50 @@ def results_ok(api, cfg, csv_dir=None):
 
     return port_tx == port_rx
 
-def stats_settled(api, cfg, previous):
-    """ Returns true if all tx flows stopped and current port stats = previous
-        initialize previous with {} prior to calling in wait_for() lambda loop
+def stats_settled(api, cfg, prev_stats):
+    """ Returns true if all tx flows are stopped and stats have "settled."
+        Settled means current tx/rx packet counts == previous counts.
+        Call this after you've stopped your flows.
+        Expecially useful in cases where the dataplane takes a while to process all the packets
+        you've already sent and you want to analyze final, stable values.
+        api - the snappi API handle
+        cfg - the configuraiton objects (not used currently)
+        prev_stats - caller-allocated storage for previous stats sample; initialize
+                     with {} prior to calling in wait_for() lambda loop
     """
     port_results, flow_results = utils.get_all_stats(api, print_output=False)
-    if 'port' not in previous:
-        previous['port'] = None
-    prev_port_results = previous['port']
-    if 'flow' not in previous:
-        previous['flow'] = None
-    prev_flow_results = previous['flow']
+
+    if 'port' not in prev_stats:
+        prev_stats['port'] = None
+    prev_port_results = prev_stats['port']
+    if 'flow' not in prev_stats:
+        prev_stats['flow'] = None
+    prev_flow_results = prev_stats['flow']
     
     result = all([f.transmit == 'stopped' for f in flow_results])
     if not result:
         print ("Waiting for flows to stop...")
     else:
         if not (prev_port_results and prev_flow_results):
-             result = False
-             print ("prev_port=%s, prev_flow=%s" % (prev_port_results, prev_flow_results))
-        # compare curr with prev
-        for stat in port_results:
-            prev_stat = [item for item in prev_port_results if item.name == stat.name]
-            if prev_stat is None:
-                print ("Port %s not in prev_port_results:\n%s" % (stat.name, prev_port_results))
-                result = False
-                break
-            prev_stat = prev_stat[0]
-            print ("\nPort %s previous:\n===============\n%s" % (prev_stat.name, prev_stat))
-            print ("\nPort %s current:\n===============\n%s" % (stat.name, stat))
-            if stat.frames_tx != prev_stat.frames_tx:
-                result = False
-                break
-            if stat.frames_rx != prev_stat.frames_rx:
-                result = False
-                break
+             result = False # Need to get first results to have a "previous"
+        else:
+            # compare curr with prev
+            for stat in port_results:
+                prev_stat = [item for item in prev_port_results if item.name == stat.name]
+                if prev_stat is None:
+                    result = False # Previous has less items than current, i.e. it was incomplete
+                    break
+                prev_stat = prev_stat[0]
+                if stat.frames_tx != prev_stat.frames_tx:
+                    result = False # tx not settled yet
+                    break
+                if stat.frames_rx != prev_stat.frames_rx:
+                    result = False # rx not settled yet
+                    break
         
-    # store in caller's "previous" dict
-    previous['port'] = port_results
-    previous['flow'] = flow_results
+    # store in caller's "prev_stats" dict
+    prev_stats['port'] = port_results
+    prev_stats['flow'] = flow_results
     return result
 
 class Demo1TestBase(bt.P4RuntimeTest):
@@ -971,20 +976,20 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         assert len(res.errors) == 0, str(res.errors)
         print ("Applied snappi config: OK")
 
-        # print ("Send packet prior to configuring tables, verify packets are dropped...")
-        # SnappiPtfUtils.start_capture(self.api, cap.port_names)
-        # SnappiPtfUtils.start_traffic(self.api)
+        print ("Send packet prior to configuring tables, verify packets are dropped...")
+        SnappiPtfUtils.start_capture(self.api, cap.port_names)
+        SnappiPtfUtils.start_traffic(self.api)
 
-        # sleep_dots(delay, "Wait for P4 pipeline to process all packets")
+        sleep_dots(delay, "Wait for P4 pipeline to process all packets")
 
-        # # Snappi flow-based test for dropped packets:
-        # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
-        # # Traditional PTF port-based test for dropped packets:
-        # assert(SnappiPtfUtils.verify_no_other_packets(self.api, cap.port_names))
+        # Snappi flow-based test for dropped packets:
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # Traditional PTF port-based test for dropped packets:
+        assert(SnappiPtfUtils.verify_no_other_packets(self.api, cap.port_names))
 
-        # port_results, flow_results = utils.get_all_stats(self.api, print_output=False)
-        # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        port_results, flow_results = utils.get_all_stats(self.api, print_output=False)
+        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         
         # Add a set of table entries that the packet should match, and
         # be forwarded out with the desired dest and source MAC
@@ -1002,16 +1007,10 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
         SnappiPtfUtils.start_traffic(self.api)
 
-        # sleep_dots(delay, "Wait for P4 pipeline to process all packets")
-        # utils.wait_for(
-        #     lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
-        #     interval_seconds=2, timeout_seconds=10
-        # )
-
         # define storage for comparing stats in wait_for()
-        self.previous = {}
+        self.prev_stats = {}
         utils.wait_for(
-            lambda: stats_settled(self.api, self.cfg, self.previous), 'stats to settle',
+            lambda: stats_settled(self.api, self.cfg, self.prev_stats), 'stats to settle',
             interval_seconds=2, timeout_seconds=20
         )
         
