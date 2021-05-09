@@ -411,7 +411,7 @@ sudo ./runptf.sh
 
 ## Run SnappiFwdTestJson PTF Test
 This test sends unidirectional traffic between two switch ports, then verifies packet forwarding/MAC rewrite using transmit/receive packet byte-by-byte comparison.
-This test is unique among all the tests because it uses a JSON configuraiton file [demo1-snappi-packet-config.json](demo1-snappi-packet-config.json) instead of programmatic configuration. Snappi can work either way.
+This test is unique among all the tests because it uses a JSON configuration file [demo1-snappi-packet-config.json](demo1-snappi-packet-config.json) instead of programmatic configuration. Snappi can work either way.
 
 
 ![SnappiFwdTestJson](SnappiFwdTestJson.svg)
@@ -506,7 +506,7 @@ This technique was originally pioneered to enable hardware-based testers to perf
 Here we'd like to showcase some code snippets which typify some of the "idioms" of snappi.
 
 ## Get an api "handle"
-The handle is a client stub which connects to the Atehan Controller REST server.
+The handle is a client stub which connects to the Ixia-c Controller REST server.
 ```
 self.api = snappi.api(host='https://localhost:8080')
 ```
@@ -626,7 +626,7 @@ utils.wait_for(
     interval_seconds=2, timeout_seconds=20
 )
 ```
-The most intersting part is the callback function invoked via `lambda` above:
+The most interesting part is the callback function invoked via `lambda` above:
 ```
 def stats_settled(api, cfg, prev_stats):
     """ Returns true if all tx flows are stopped and stats have "settled."
@@ -635,7 +635,7 @@ def stats_settled(api, cfg, prev_stats):
         Expecially useful in cases where the dataplane takes a while to process all the packets
         you've already sent and you want to analyze final, stable values.
         api - the snappi API handle
-        cfg - the configuraiton objects (not used currently)
+        cfg - the configuration objects (not used currently)
         prev_stats - caller-allocated storage for previous stats sample; initialize
                      with {} prior to calling in wait_for() lambda loop
     """
