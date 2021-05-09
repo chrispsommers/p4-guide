@@ -1,22 +1,15 @@
-# P4 PTF Demo Using snappi and Athena SW Traffic Generator instead of Scapy!
+# P4 PTF Demo Using snappi and Ixia-c SW Traffic Generator instead of Scapy!
 ## Preface
 This project is an adaptation (fork) of [p4-guide](https://github.com/jafingerhut/p4-guide/) originally created by Andy Fingerhut. It includes one new PTF test directory. Instead of using [Scapy](https://scapy.readthedocs.io/en/latest/index.html) for sending and capturing packets, it has been modified to utilize 
-the [Athena Software Traffic Generator](https://github.com/open-traffic-generator/athena) via the [snappi Python client library](https://github.com/open-traffic-generator/snappi).
+the [Ixia-c Software Traffic Generator](https://github.com/open-traffic-generator/ixia-c) via the [snappi Python client library](https://github.com/open-traffic-generator/snappi).
 
-<div align="center">
-  <h1>Athena</h1>
-    <p>
-    <img src="athena.png" width="100" height="100"></img>
-  </p>
-</div>
+Ixia-c is a modern, powerful and API driven traffic generator designed to cater to the needs of hyperscalers, network hardware vendors and hobbyists alike.
 
-Athena is a modern, powerful and API driven traffic generator designed to cater to the needs of hyperscalers, network hardware vendors and hobbyists alike.
+![Ixia-c](ixia-c.drawio.svg)
 
-![Athena](athena.drawio.svg)
+Ixia-c is available for free and is distributed / deployed as a multi-container application consisting of a controller, a traffic-engine and an app-usage-reporter.
 
-Athena is available for free and is distributed / deployed as a multi-container application consisting of a controller, a traffic-engine and an app-usage-reporter.
-
-As a reference implementation of Open Traffic Generator API, Athena supports client SDKs in various languages, most prevalent being [snappi](https://github.com/open-traffic-generator/snappi).
+As a reference implementation of Open Traffic Generator API, Ixia-c supports client SDKs in various languages, most prevalent being [snappi](https://github.com/open-traffic-generator/snappi).
 <div align="center">
     <p>
     <img src="snappi-logo.png" width="250" height="50"></img>
@@ -26,10 +19,10 @@ As a reference implementation of Open Traffic Generator API, Athena supports cli
 [snappi](https://github.com/open-traffic-generator/snappi) is a Python client which uses the [Open Traffic Generator](https://github.com/open-traffic-generator) API. This REST API talks to a variety of software and hardware-based traffic generators/analyzers via a unified data model, allowing you to "write tests once and run anywhere" at speeds from "slow simulations" up to Tbps.
 
 The main differences between this repo and the original are the following additions:
-* [demo1-athena/](demo1-athena/README.md) directory with new PTF scripts to demonstrate PTF-snappi-athena integration. [Click HERE](demo1-athena/README.md) to get started!
+* [demo1-snappi/](demo1-snappi/README.md) directory with new PTF scripts to demonstrate PTF-snappi-Ixia-c integration. [Click HERE](demo1-snappi/README.md) to get started!
 * [testlib/utils](testlib/utils) directory containing snappi utility scripts
 
-# [=> Go to the Snappi-Athena Demo](demo1-athena/README.md)
+# [=> Go to the Snappi-Ixia-c Demo](demo1-snappi/README.md)
 
 # References
 * https://pypi.org/project/snappi/

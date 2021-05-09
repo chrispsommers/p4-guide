@@ -809,12 +809,12 @@ def get_container_ids():
         details_list = container.split(' ')
         container_name = None
         for detail in details_list:
-            if detail.startswith('athena'):
+            if detail.startswith('ixia-c'):
                 container_name = detail
                 break
 
         if container is None:
-            raise Exception('Container name should start with athena')
+            raise Exception('Container name should start with ixia-c')
 
         container_name = container_name.split(":")[0].split('/')[1]
 

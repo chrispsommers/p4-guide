@@ -1,10 +1,10 @@
 # Preface
 This directory is an adaptation of [p4-guide/demo1](https://github.com/jafingerhut/p4-guide/tree/master/demo1) originally created by Andy Fingerhut. Specifically, the PTF directory contains a new test file [ptf/demo1-snappi.py](ptf/demo1-snappi.py) based on the original `demo1.py`.Instead of using [Scapy](https://scapy.readthedocs.io/en/latest/index.html) for sending and capturing packets, it has been modified to utilize 
-the [Athena Software Traffic Generator](https://github.com/open-traffic-generator/athena) via the [snappi Python client library](https://github.com/open-traffic-generator/snappi).
+the [Ixia-c Software Traffic Generator](https://github.com/open-traffic-generator/ixia-c) via the [snappi Python client library](https://github.com/open-traffic-generator/snappi).
 
 `snappi` is a Python client which uses the [Open Traffic Generator](https://github.com/open-traffic-generator) API. This REST API talks to a variety of software and hardware-based traffic generators/analyzers via a unified data model, allowing you to "write tests once and run anywhere" at speeds from "slow simulations" up to Tbps.
 
-This project comprises a simple P4 "switch" program which performs LPM Lookup on IP destination address, and switches packets to the correct egress port while performing MAC address rewrite. A few test programs in the PTF framework demonstrate the ease and power of snappi and athena as replacements for Scapy.
+This project comprises a simple P4 "switch" program which performs LPM Lookup on IP destination address, and switches packets to the correct egress port while performing MAC address rewrite. A few test programs in the PTF framework demonstrate the ease and power of snappi and ixia-c as replacements for Scapy.
 
 # References
 * https://github.com/open-traffic-generator
@@ -14,7 +14,7 @@ This project comprises a simple P4 "switch" program which performs LPM Lookup on
 * https://scapy.readthedocs.io
 
 # Introduction
-For background context, expand the section below to see the original content of demo1/readme.md. Proceed to [System Prerequisites](#system-prerequisities) for the streamlined instructions to demo snappi and Athena.
+For background context, expand the section below to see the original content of demo1/readme.md. Proceed to [System Prerequisites](#system-prerequisities) for the streamlined instructions to demo snappi and Ixia-c.
 
 <summary>Click ""details" arrow to see the original README</summary>
 <details>
@@ -275,11 +275,11 @@ Date:   Fri Sep 20 08:55:10 2019 -0700
 This was tested using Ubuntu 20.04. Earlier versions of Ubuntu will probably work with some adaptation, but these probably install Python 2.7 by default so some adjustments might be necessary. This is beyond the scope of this tutorial.
 
 Two workflows are presented:
-* Start with fresh Ubuntu and add quite a few baseline P4 tutorial development packages, then add *this* repo, Athena + snappi. This option allows takes a few hours longer to install and build numerous packages like `gRPC`, `p4c`, etc. but it lets you customize your base OS more to your liking.
-* Start with a pre-configured Ubuntu 20.04 VM already containing P4 dev packages + tutorials, then add *this* repo, Athena + snappi. This avoids installig and building many tools but the base OS is a somewhat limited instance of Ubuntu 20.04 including low-resolution graphics drivers, lack of many common packages etc.
+* Start with fresh Ubuntu and add quite a few baseline P4 tutorial development packages, then add *this* repo, Ixia-c + snappi. This option allows takes a few hours longer to install and build numerous packages like `gRPC`, `p4c`, etc. but it lets you customize your base OS more to your liking.
+* Start with a pre-configured Ubuntu 20.04 VM already containing P4 dev packages + tutorials, then add *this* repo, Ixia-c + snappi. This avoids installig and building many tools but the base OS is a somewhat limited instance of Ubuntu 20.04 including low-resolution graphics drivers, lack of many common packages etc.
 
 ## A note on CPU Core Pinning
-Due to the DPDK implementation, Athena requires 2 "pinned" CPU cores for each traffic engine to achieve full performance, plus one more core dedicated as the controller. The PTF tests in this tutorial require 5 and 7 cores, respectively.
+Due to the DPDK implementation, Ixia-c requires 2 "pinned" CPU cores for each traffic engine to achieve full performance, plus one more core dedicated as the controller. The PTF tests in this tutorial require 5 and 7 cores, respectively.
 
 Please check the CPU core count of your development machine or VM. Try `nproc`. The effective CPU count is proably twice this.
 
@@ -313,7 +313,7 @@ It will create a directory `p4-guide` where all of the subsequent activities wil
 These are performed after completing either one of the OS options above.
 
 ### Install Docker
-You'll need Docker to run Athena.
+You'll need Docker to run Ixia-c.
 There are various ways to install Docker. Below is but one method. See [Docker.com](https://www.docker.com/get-started).
 ```
 sudo apt update
@@ -325,7 +325,7 @@ sudo systemctl enable docker
 **NOTE**: the `usermod` command above lets you avoid needing `sudo` for all `docker` commands. You may need to re-login, or in the case of a VM, restart the OS, in order for it to take effect. You can verify `docker` group membership via the `id` command.
 
 
-### Install Athena docker images
+### Install Ixia-c docker images
 Pull the images from public repository:
 TBD
 ```
@@ -333,8 +333,8 @@ docker pull ...
 ```
 Tag the docker images with shorter names for convenience:
 ```
-docker tag <...> athena-controller:latest
-docker tag <...> athena-te:latest
+docker tag <...> ixia-c-controller:latest
+docker tag <...> ixia-c-te:latest
 ```
 ### Install snappi python libraries
 This install snappi and other libraries so `root` can access it in the PTF scripts (which have to run as `root`)
@@ -342,13 +342,13 @@ This install snappi and other libraries so `root` can access it in the PTF scrip
 sudo pip3 install snappi dpkt
 ```
 You can use `snappi` in other projects! Just add `import snappi` to your Python programs.
-### Optional - Install Athena Documentation/Examples
+### Optional - Install Ixia-c Documentation/Examples
 `cd` to a suitable directory to install these resources for use outside this tutorial.
 ```
-git clone --recursive https://github.com/open-traffic-generator/athena
+git clone --recursive https://github.com/open-traffic-generator/ixia-c
 ```
 # Lets do the Demos!
-> **NOTE:** Unless otherwise mentioned, steps below take place in the current directory (the same one as contains this README), e.g. `p4-guide/demo1-athena`.
+> **NOTE:** Unless otherwise mentioned, steps below take place in the current directory (the same one as contains this README), e.g. `p4-guide/demo1-snappi`.
 
 ## Compile P4 code
 ```
@@ -395,7 +395,7 @@ Here's an example: `sudo ./runptf.sh demo1-snappi.SnappiFwdTestBidirLpmRange`
 
 ### Highlighted Tests
 There a several tests inside [demo1-snappi.py](demo1-snappi.py) which you can inspect and run. Here we call out some in particular.
-* [SnappiFwdTestJson](#run-snappifwdtestjson-ptf-test) - this test sends one packet between ports. This test is unique in that it uses a JSON file to define the Athena configuration instead of inline python to manipulate snappi objects.
+* [SnappiFwdTestJson](#run-snappifwdtestjson-ptf-test) - this test sends one packet between ports. This test is unique in that it uses a JSON file to define the Ixia-c configuration instead of inline python to manipulate snappi objects.
 * [SnappiFwdTest](#run-snappifwdtest-ptf-test) - same as [SnappiFwdTestJson](#run-snappifwdtest-ptf-test) but uses inline python to manipulate snappi objects.
 * [SnappiFwdTestBidirLpmRange](#run-snappifwdtestbidirlpmrange-ptf-test) - tests bidirectional LPM forwarding between 2 ports, verify stats and full packet contents
 * [SnappiFwdTest4PortMesh](#run-snappifwdtest4portmesh-ptf-test) - tests bidirectional LPM forwarding between 2 ports, verify stats only.
@@ -411,7 +411,7 @@ sudo ./runptf.sh
 
 ## Run SnappiFwdTestJson PTF Test
 This test sends unidirectional traffic between two switch ports, then verifies packet forwarding/MAC rewrite using transmit/receive packet byte-by-byte comparison.
-This test is unique among all the tests because it uses a JSON configuraiton file [demo1-athena-packet-config.json](demo1-athena-packet-config.json) instead of programmatic configuration. Snappi can work either way.
+This test is unique among all the tests because it uses a JSON configuraiton file [demo1-snappi-packet-config.json](demo1-snappi-packet-config.json) instead of programmatic configuration. Snappi can work either way.
 
 
 ![SnappiFwdTestJson](SnappiFwdTestJson.svg)
@@ -420,8 +420,8 @@ This test is unique among all the tests because it uses a JSON configuraiton fil
 <summary>Click the arrow to expand</summary>
 <details>
 
-* Configure Athena for one traffic flow, into `veth2` and out `veth4` respectively (dataplane ports 1 and 2 in the P4 code). The flow will send a single packet with IP and MAC addresses designed to forward from dataplane port 1 to port 2.
-* Configure Athena to capture all the return traffic
+* Configure Ixia-c for one traffic flow, into `veth2` and out `veth4` respectively (dataplane ports 1 and 2 in the P4 code). The flow will send a single packet with IP and MAC addresses designed to forward from dataplane port 1 to port 2.
+* Configure Ixia-c to capture all the return traffic
 * Start the traffic flow and capture the results
 * Verify no packets were captured because the P4 dataplane forwawrding tables have not been programmed: the default action is `drop`.
 * Configure the P4 tables to match on the DIP as configured in the traffic flow and forward to the correct egress ports also performing MAC rewrite.
@@ -452,8 +452,8 @@ This test sends bidirectional traffic between two switch ports, then verifies pa
 <summary>Click the arrow to expand</summary>
 <details>
 
-* Configure Athena for two traffic flows, into `veth2` and `veth4`respectively (dataplane ports 1 and 2 in the P4 code). Each flow will send 512 packets into its port, incrementing the last byte of the DIP from 0 to 256 twice. For packets 257-512, the next highest digit of the DIP is incremented, which rolls into the next `/24` prefix and therefore should not get forwarded.
-* Configure Athena to capture all the return traffic
+* Configure Ixia-c for two traffic flows, into `veth2` and `veth4`respectively (dataplane ports 1 and 2 in the P4 code). Each flow will send 512 packets into its port, incrementing the last byte of the DIP from 0 to 256 twice. For packets 257-512, the next highest digit of the DIP is incremented, which rolls into the next `/24` prefix and therefore should not get forwarded.
+* Configure Ixia-c to capture all the return traffic
 * Start the traffic flows and capture the results
 * Verify no packets were captured because the P4 dataplane forwawrding tables have not been programmed: the default action is `drop`.
 * Configure the P4 tables to match on the DIPs as configured in the traffic flows and forward to the correct egress ports, also performing MAC rewrite.
@@ -474,8 +474,8 @@ This test sends 12 flows in a full mesh between 4 ports and verfies the received
 <summary>Click the arrow to expand</summary>
 <details>
 
-* Configure Athena for 12 traffic flows, into `veth2`, `veth4`, `veth6` and `veth8` (dataplane ports 1-4 respectively in the P4 code). The 12 flows comprise a full-meash, full-duplex test of port forwarding. Each flow will send 256 packets into its port, incrementing the last byte of the DIP from 1 to 256. Each flow will emit packets at 50 packets per second. We wait until the received packet counts match the extecped values on all flows (or timeout waiting).
-* Configure Athena to capture all the return traffic
+* Configure Ixia-c for 12 traffic flows, into `veth2`, `veth4`, `veth6` and `veth8` (dataplane ports 1-4 respectively in the P4 code). The 12 flows comprise a full-meash, full-duplex test of port forwarding. Each flow will send 256 packets into its port, incrementing the last byte of the DIP from 1 to 256. Each flow will emit packets at 50 packets per second. We wait until the received packet counts match the extecped values on all flows (or timeout waiting).
+* Configure Ixia-c to capture all the return traffic
 * Start the traffic flows and capture the results
 * Verify no packets were captured because the P4 dataplane forwarding tables have not been programmed: the default action is `drop`.
 * Configure the P4 tables to match on the DIPs as configured in the traffic flows and forward to the correct egress ports, also performing MAC rewrite.
@@ -500,7 +500,7 @@ Ixia packet testers utilize a proprietary flow-tracking technique which involves
 * 32-bit timestamp which can be used to measure latency or delay
 ![Ixia-headers](ixia-headers.svg)
 
-This technique was originally pioneered to enable hardware-based testers to perform real-time analysis of line-rate traffic prior to economically-viable protocol parsing engines (like P4 ASICs). The same technique can be done in CPUs (Athena) at lower speeds (approaching 100Gbps for larger packet sizes, limited by the packet-per-second rate).
+This technique was originally pioneered to enable hardware-based testers to perform real-time analysis of line-rate traffic prior to economically-viable protocol parsing engines (like P4 ASICs). The same technique can be done in CPUs (Ixia-c) at lower speeds (approaching 100Gbps for larger packet sizes, limited by the packet-per-second rate).
 
 # snappi snippets
 Here we'd like to showcase some code snippets which typify some of the "idioms" of snappi.
@@ -511,10 +511,10 @@ The handle is a client stub which connects to the Atehan Controller REST server.
 self.api = snappi.api(host='https://localhost:8080')
 ```
 ## Load a JSON config file
-The `config` object is used to manipulate Athena configurations. You can create it a command at a time, or initialize it from a JSON file as shown below.
+The `config` object is used to manipulate Ixia-c configurations. You can create it a command at a time, or initialize it from a JSON file as shown below.
 ```
 self.cfg = utils.common.load_test_config(
-    self.api, 'demo1-athena-packet-config.json', apply_settings=True
+    self.api, 'demo1-snappi-packet-config.json', apply_settings=True
 )
 res = self.api.set_config(self.cfg)
 ```

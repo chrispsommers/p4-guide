@@ -348,7 +348,7 @@ class SnappiFwdTestJson(SnappiFwdTestBase):
         # Note this method requires xternal JSON file be in sync with the P4 table programming values
         # and packet compare values defined below, which could be a maintenance burden
         self.cfg = utils.common.load_test_config(
-            self.api, 'demo1-athena-packet-config.json', apply_settings=True
+            self.api, 'demo1-snappi-packet-config.json', apply_settings=True
         )
         res = self.api.set_config(self.cfg)
         assert len(res.errors) == 0, str(res.errors)
@@ -514,7 +514,7 @@ class SnappiFwdTestJsonBidir(SnappiFwdTestBase):
         # Note this method requires xternal JSON file be in sync with the P4 table programming values
         # and packet compare values defined below, which could be a maintenance liability if they drift.
         self.cfg = utils.common.load_test_config(
-            self.api, 'demo1-athena-packet-config-bidir.json', apply_settings=True
+            self.api, 'demo1-snappi-packet-config-bidir.json', apply_settings=True
         )
         res = self.api.set_config(self.cfg)
         assert len(res.errors) == 0, str(res.errors)
