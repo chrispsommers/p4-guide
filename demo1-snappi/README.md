@@ -327,7 +327,9 @@ sudo systemctl enable docker
 
 ### Install Ixia-c docker images
 Pull the images from public repository:
-TBD
+
+**TBD - will be provided soon!**
+
 ```
 docker pull ...
 ```
@@ -336,7 +338,7 @@ Tag the docker images with shorter names for convenience:
 docker tag <...> ixia-c-controller:latest
 docker tag <...> ixia-c-te:latest
 ```
-### Install snappi python libraries
+### Install snappi Python libraries
 This install snappi and other libraries so `root` can access it in the PTF scripts (which have to run as `root`)
 ```
 sudo pip3 install snappi dpkt
@@ -387,16 +389,18 @@ sudo tcpdump -eni veth8
 
 ### How to Run
 
-The `runptf.sh` helper script, without further arguments, will run all tests. Use `sudo` to acquire root access.
+The `runptf.sh` helper script, without further arguments, will run all tests. Use `sudo` to acquire root access. his script will launch the required Ixia-c containers, run the actual PTF script, then kill the containers.
 
-To run a specific test, add `basename.classname` to the command, where `basename` is the base filename containing the PTF test (e.g. demo1-snappi.py is the filename, demo1-snappi is the basename) and `classname` is the Python classname containing the test (e.g. `SnappiFwdTestBidirLpmRange`).
+>**NOTE:** The Ixia-c traffic engines are bound to `veth3`, `veth5`, `veth7`, and `veth9` which are normally considered the "switch's" half of the veth pairs. You can observe the traffic by monitoring the other half of each pair, e.g. `veth2,4,6,8`. You cannot directly monitor the ports which are bound to Ixia-c traffic engines due to the underlying implementation.
+
+To run a specific test, add `basename.classname` to the command, where `basename` is the base filename containing the PTF test (e.g. demo1-snappi.py is the filename, `demo1-snappi` is the basename) and `classname` is the Python classname containing the test (e.g. `SnappiFwdTestBidirLpmRange`).
 
 Here's an example: `sudo ./runptf.sh demo1-snappi.SnappiFwdTestBidirLpmRange`
 
 ### Highlighted Tests
 There a several tests inside [demo1-snappi.py](demo1-snappi.py) which you can inspect and run. Here we call out some in particular.
-* [SnappiFwdTestJson](#run-snappifwdtestjson-ptf-test) - this test sends one packet between ports. This test is unique in that it uses a JSON file to define the Ixia-c configuration instead of inline python to manipulate snappi objects.
-* [SnappiFwdTest](#run-snappifwdtest-ptf-test) - same as [SnappiFwdTestJson](#run-snappifwdtest-ptf-test) but uses inline python to manipulate snappi objects.
+* [SnappiFwdTestJson](#run-snappifwdtestjson-ptf-test) - this test sends one packet between ports. This is almost identical to the original test of the same name, but modified to use snappi instead of Scapy. This test is notewrothy  in that it uses a JSON file, instead of inline Python, to perform the Ixia-c configuration to manipulate snappi objects.
+* [SnappiFwdTest](#run-snappifwdtest-ptf-test) - same as [SnappiFwdTestJson](#run-snappifwdtest-ptf-test) but uses inline Python to manipulate snappi objects.
 * [SnappiFwdTestBidirLpmRange](#run-snappifwdtestbidirlpmrange-ptf-test) - tests bidirectional LPM forwarding between 2 ports, verify stats and full packet contents
 * [SnappiFwdTest4PortMesh](#run-snappifwdtest4portmesh-ptf-test) - tests bidirectional LPM forwarding between 2 ports, verify stats only.
 
@@ -440,7 +444,7 @@ sudo ./runptf.sh demo1-snappi.SnappiFwdTestJson
 ```
 
 ## Run SnappiFwdTest PTF Test
-This test is identical to [SnappiFwdTestJson](#run-snappifwdtest-ptf-test) but uses inline python to manipulate snappi objects.
+This test is identical to [SnappiFwdTestJson](#run-snappifwdtest-ptf-test) but uses inline Python to manipulate snappi objects.
 
 ## Run SnappiFwdTestBidirLpmRange PTF test
 This test sends bidirectional traffic between two switch ports, then verifies packet forwarding/MAC rewrite using both captured statistics and transmit/receive packet byte-by-byte comparison.
@@ -474,7 +478,7 @@ This test sends 12 flows in a full mesh between 4 ports and verfies the received
 <summary>Click the arrow to expand</summary>
 <details>
 
-* Configure Ixia-c for 12 traffic flows, into `veth2`, `veth4`, `veth6` and `veth8` (dataplane ports 1-4 respectively in the P4 code). The 12 flows comprise a full-meash, full-duplex test of port forwarding. Each flow will send 256 packets into its port, incrementing the last byte of the DIP from 1 to 256. Each flow will emit packets at 50 packets per second. We wait until the received packet counts match the extecped values on all flows (or timeout waiting).
+* Configure Ixia-c for 12 traffic flows, into `veth2`, `veth4`, `veth6` and `veth8` (dataplane ports 1-4 respectively in the P4 code). The 12 flows comprise a full-mesh, full-duplex test of port forwarding. Each flow will send 256 packets into its port, incrementing the last byte of the DIP from 1 to 256. Each flow will emit packets at 50 packets per second. We wait until the pipeline finishes processing all packets (or timeout while waiting).
 * Configure Ixia-c to capture all the return traffic
 * Start the traffic flows and capture the results
 * Verify no packets were captured because the P4 dataplane forwarding tables have not been programmed: the default action is `drop`.
@@ -483,7 +487,7 @@ This test sends 12 flows in a full mesh between 4 ports and verfies the received
 * Verify a number of expectations:
   * Each port transmits the correct count of packets ( 3*255, i.e. 255 packets to each of the other ports in the mesh)
   * Port Tx stats = port Rx stats = 3*255
-  * The captured results has the correct number of packets for each flow (same as tranmitted to each flow)
+  * The captured results has the correct number of packets for each flow (same as transmitted to each flow)
   * Examine each captured packet, extract IP src and dest address, and confirm exactly one packet was sent between each "host" and each of 255 "destinations" on the other port's subnets.
 </details>
 
