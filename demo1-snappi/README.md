@@ -281,7 +281,7 @@ Two workflows are presented:
 ## A note on CPU Core Pinning
 Due to the DPDK implementation, Ixia-c requires 2 "pinned" CPU cores for each traffic engine to achieve full performance, plus one more core dedicated as the controller. The PTF tests in this tutorial require 5 and 7 cores, respectively.
 
-Please check the CPU core count of your development machine or VM. Try `nproc`. The effective CPU count is proably twice this.
+Please check the CPU core count of your development machine or VM. Try `nproc`.
 
 ## OS Option 1 - Start with Fresh Ubuntu 20.04
 ### Install this repo
@@ -325,18 +325,12 @@ sudo systemctl enable docker
 **NOTE**: the `usermod` command above lets you avoid needing `sudo` for all `docker` commands. You may need to re-login, or in the case of a VM, restart the OS, in order for it to take effect. You can verify `docker` group membership via the `id` command.
 
 
-### Install Ixia-c docker images
-Pull the images from public repository:
-
-**TBD - will be provided soon!**
+### Optional - Install Ixia-c docker images
+You can pull the images from the Docker repository before you run the PTF script. Otherwise, the script will automatically pull the Docker images the first time you run it.
 
 ```
-docker pull ...
-```
-Tag the docker images with shorter names for convenience:
-```
-docker tag <...> ixia-c-controller:latest
-docker tag <...> ixia-c-te:latest
+docker pull ixiacom/ixia-c-controller:latest
+docker pull ixiacom/ixia-c-traffic-engine:latest
 ```
 ### Install snappi Python libraries
 This install snappi and other libraries so `root` can access it in the PTF scripts (which have to run as `root`)
@@ -682,5 +676,5 @@ The `utils.wait_for()` helper method will keep calling `stats_settled()` every `
 
 `stats_settled()` detects that all flows have stopped transmitting, and that the statistics counters have stopped changing in between samples. This gives time for the P4 bmv2 pipeline, which is relatively slow, to process all the packets before doing our final test assertions. This is an example of synchronizing the script state to the device under test.
 
-You can a similar function called `results_ok()` in the code. It uses different criteria for the final test results ( sum of all Rx flow counters == sum of all Tx flow counters).
+You can a similar function called `stats_expected()` in the code. It uses different criteria for the final test results ( sum of all Rx flow counters == sum of all Tx flow counters).
 

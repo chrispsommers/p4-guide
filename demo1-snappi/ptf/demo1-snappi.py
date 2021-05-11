@@ -56,7 +56,14 @@ def sleep_dots(secs,msg):
         time.sleep(1)
     print
 
-def results_ok(api, cfg, csv_dir=None):
+def api_results_ok(results):
+    if results.errors == None or len(results.errors) == 0:
+        return True
+    else:
+        print ("Results=%s" % results)
+        return False
+
+def stats_expected(api, cfg, csv_dir=None):
     """
     Returns true if stats are as expected, False otherwise.
     """
@@ -199,9 +206,7 @@ class SnappiPtfUtils():
         capture_state.port_names = cap_port_names
         print('Starting capture on ports %s ...' % str(cap_port_names))
         res = api.set_capture_state(capture_state)
-        if len(res.errors):
-            print (str(res.errors))
-        assert len(res.errors) == 0, str(res.errors)
+        assert api_results_ok(res), res
 
     def start_traffic(api):
         """ Start traffic flow(s) whicih are already configured.
@@ -213,9 +218,7 @@ class SnappiPtfUtils():
         # transmit_state.state = 'start'
         print('Starting traffic')
         res = api.set_transmit_state(ts)
-        if len(res.errors):
-            print (str(res.errors))
-        assert len(res.errors) == 0, str(res.errors)
+        assert api_results_ok(res), res
 
     def verify_no_other_packets(api, cap_port_names):
         """ Returns true if no bytes captured on a port
@@ -351,7 +354,7 @@ class SnappiFwdTestJson(SnappiFwdTestBase):
             self.api, 'demo1-snappi-packet-config.json', apply_settings=True
         )
         res = self.api.set_config(self.cfg)
-        assert len(res.errors) == 0, str(res.errors)
+        assert api_results_ok(res), res
         in_dmac = 'ee:30:ca:9d:1e:00'
         in_smac = 'ee:cd:00:7e:70:00'
         ip_dst_addr = '10.1.0.1'
@@ -392,7 +395,7 @@ class SnappiFwdTestJson(SnappiFwdTestBase):
         SnappiPtfUtils.start_traffic(self.api)
 
         utils.wait_for(
-            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            lambda: stats_expected(self.api, self.cfg, ), 'stats to be as expected',
             interval_seconds=2, timeout_seconds=10
         )
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, capture_port_name, self.pkt_compare_func)
@@ -456,7 +459,7 @@ class SnappiFwdTest(SnappiFwdTestBase):
 
         # push configuration
         res = self.api.set_config(self.cfg)
-        assert len(res.errors) == 0, str(res.errors)
+        assert api_results_ok(res), res
 
         print ("Send packet prior to configuring tables, verify packets are dropped...")
         capture_port_name = 'port2'
@@ -495,7 +498,7 @@ class SnappiFwdTest(SnappiFwdTestBase):
         SnappiPtfUtils.start_traffic(self.api)
 
         utils.wait_for(
-            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            lambda: stats_expected(self.api, self.cfg, ), 'stats to be as expected',
             interval_seconds=2, timeout_seconds=10
         )
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, capture_port_name, self.pkt_compare_func)
@@ -517,7 +520,7 @@ class SnappiFwdTestJsonBidir(SnappiFwdTestBase):
             self.api, 'demo1-snappi-packet-config-bidir.json', apply_settings=True
         )
         res = self.api.set_config(self.cfg)
-        assert len(res.errors) == 0, str(res.errors)
+        assert api_results_ok(res), res
 
         in_dmac = 'ee:30:ca:9d:1e:00'
         in_smac = 'ee:cd:00:7e:70:00'
@@ -565,7 +568,7 @@ class SnappiFwdTestJsonBidir(SnappiFwdTestBase):
 
         # Wait for all packets to be received
         utils.wait_for(
-            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            lambda: stats_expected(self.api, self.cfg, ), 'stats to be as expected',
             interval_seconds=2, timeout_seconds=10
         )
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, 'port2', self.pkt_compare_func)
@@ -664,7 +667,7 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
 
         # push configuration
         res = self.api.set_config(self.cfg)
-        assert len(res.errors) == 0, str(res.errors)
+        assert api_results_ok(res), res
 
         print ("Send packet prior to configuring tables, verify packets are dropped...")
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
@@ -705,7 +708,7 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         SnappiPtfUtils.start_traffic(self.api)
 
         utils.wait_for(
-            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            lambda: stats_expected(self.api, self.cfg, ), 'stats to be as expected',
             interval_seconds=2, timeout_seconds=10
         )
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, 'port2', self.pkt_compare_func)
@@ -822,7 +825,7 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
 
         # push configuration
         res = self.api.set_config(self.cfg)
-        assert len(res.errors) == 0, str(res.errors)
+        assert api_results_ok(res), res
 
         print ("Send packet prior to configuring tables, verify packets are dropped...")
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
@@ -873,7 +876,7 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         sleep_dots(delay, "Wait for P4 pipeline to process all packets")
 
         utils.wait_for(
-            lambda: results_ok(self.api, self.cfg, ), 'stats to be as expected',
+            lambda: stats_expected(self.api, self.cfg, ), 'stats to be as expected',
             interval_seconds=2, timeout_seconds=10
         )
 
@@ -972,8 +975,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         # print ("Applying snappi config:\n%s" % self.cfg)
         print ("Applying snappi config...")
         res = self.api.set_config(self.cfg)
-        assert len(res.errors) == 0, str(res.errors)
-        print ("Applied snappi config: OK")
+        assert api_results_ok(res), res
 
         print ("Send packet prior to configuring tables, verify packets are dropped...")
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
