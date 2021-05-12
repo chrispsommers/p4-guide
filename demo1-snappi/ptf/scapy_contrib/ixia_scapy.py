@@ -1,6 +1,7 @@
 # scapy packet layer for IXIA instrumentation fragment inside payload
 # scapy.contrib.description = IXIA-INSTRUMENTATION-PACKETS
 # scapy.contrib.status = loads
+# Copyright 2021 Keysight Technologies
 
 from scapy.packet import Packet,bind_layers
 from scapy.fields import *
