@@ -383,7 +383,7 @@ sudo tcpdump -eni veth8
 
 ### How to Run
 
-The `runptf.sh` helper script, without further arguments, will run all tests. Use `sudo` to acquire root access. his script will launch the required Ixia-c containers, run the actual PTF script, then kill the containers.
+The `runptf.sh` helper script, without further arguments, will run all tests. Use `sudo` to acquire root access. This script will launch the required Ixia-c containers, run the actual PTF script, then kill the containers.
 
 >**NOTE:** The Ixia-c traffic engines are bound to `veth3`, `veth5`, `veth7`, and `veth9` which are normally considered the "switch's" half of the veth pairs. You can observe the traffic by monitoring the other half of each pair, e.g. `veth2,4,6,8`. You cannot directly monitor the ports which are bound to Ixia-c traffic engines due to the underlying implementation.
 
@@ -676,5 +676,5 @@ The `utils.wait_for()` helper method will keep calling `stats_settled()` every `
 
 `stats_settled()` detects that all flows have stopped transmitting, and that the statistics counters have stopped changing in between samples. This gives time for the P4 bmv2 pipeline, which is relatively slow, to process all the packets before doing our final test assertions. This is an example of synchronizing the script state to the device under test.
 
-You can a similar function called `stats_expected()` in the code. It uses different criteria for the final test results ( sum of all Rx flow counters == sum of all Tx flow counters).
+You can find a similar function called `stats_expected()` in the code. It uses different criteria for the final test results (sum of all Rx flow counters == sum of all Tx flow counters).
 
