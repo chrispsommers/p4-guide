@@ -543,12 +543,12 @@ def print_stats(port_stats=None, flow_stats=None, clear_screen=None):
         print('Flow Stats')
         print(border)
         print(row_format.format('Flow', 'Rx Frames', 'Rx Bytes',
-        # 'Loss', 'Min Latency (ns)',
-        'Max latency (ns)', 'Avg Latency (ns)')) # noqa
+                                'Frames Rx Rate', 'Transmit'
+        )) # noqa
         for stat in flow_stats:
             print(row_format.format(stat.name, stat.frames_rx, stat.bytes_rx,
-                                    # stat.loss, stat.min_latency_ns,
-                                    stat.max_latency_ns, stat.avg_latency_ns))
+                                    stat.frames_rx_rate, stat.transmit
+            ))
         print(border)
         print("")
         print("")

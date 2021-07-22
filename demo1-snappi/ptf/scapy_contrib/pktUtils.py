@@ -51,7 +51,6 @@ def ixia_tcp_packet_floating_instrum(
                         _sig1=SIGNATURE1,
                         _sig2=SIGNATURE2,
                         _sig3=SIGNATURE3,
-                        _sig_flag=False,
                         _pgid=0,
                         _tstamp=0,
                         _seqnum=0,
@@ -106,8 +105,6 @@ def ixia_tcp_packet_floating_instrum(
     shouldn't assume anything about this packet other than that
     it is a valid ethernet/IP/TCP frame.
     """
-    if not _sig_flag:
-        _sig1 = _sig2 = _sig3 = 0x00000000
 
     if MINSIZE > pktlen:
         pktlen = MINSIZE
