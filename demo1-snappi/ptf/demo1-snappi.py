@@ -57,7 +57,7 @@ def sleep_dots(secs,msg):
     print
 
 def api_results_ok(results):
-    if results.errors == None or len(results.errors) == 0:
+    if hasattr(results, 'warnings'):
         return True
     else:
         print ("Results=%s" % results)
@@ -103,8 +103,8 @@ def stats_settled(api, cfg, prev_stats):
     if not result:
         print ("Waiting for flows to stop...")
     else:
-        if not (prev_port_results and prev_flow_results):
-             result = False # Need to get first results to have a "previous"
+        if not (prev_port_results):
+            result = False # Need to get first results to have a "previous"
         else:
             # compare curr with prev
             for stat in port_results:
