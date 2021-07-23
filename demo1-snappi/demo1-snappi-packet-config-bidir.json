@@ -1,8 +1,20 @@
 {
     "ports": [
         {
+            "name": "veth0"
+        },
+        {
+            "name": "veth1"
+        },
+        {
+            "name": "veth2"
+        },
+        {
             "name": "port1",
             "location": "localhost:5555"
+        },
+        {
+            "name": "veth4"
         },
         {
             "name": "port2",

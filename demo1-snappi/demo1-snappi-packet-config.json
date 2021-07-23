@@ -1,21 +1,24 @@
 {
     "ports": [
         {
+            "name": "veth0"
+        },
+        {
+            "name": "veth1"
+        },
+        {
+            "name": "veth2"
+        },
+        {
             "name": "port1",
             "location": "localhost:5555"
         },
         {
+            "name": "veth4"
+        },
+        {
             "name": "port2",
             "location": "localhost:5556"
-        }
-    ],
-    "layer1": [
-        {
-            "name": "l1",
-            "port_names": [
-                "port1", "port2"
-            ],
-            "speed": "speed_1_gbps"
         }
     ],
     "captures": [

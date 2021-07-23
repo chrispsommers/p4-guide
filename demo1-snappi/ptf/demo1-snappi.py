@@ -19,9 +19,14 @@
 # Modifications Copyright 2021 Keysight Technologies
 # Modified FwdTest + added other tests written to use snappi
 
+# T-Rex Python API
+import sys, os
+
+TREX_PATH = "/opt/trex/v2.90/automation/trex_control_plane/interactive"
+sys.path.insert(0, os.path.abspath(TREX_PATH))
+
 import logging
 import ptf
-import os
 import time
 from ptf import config
 import ptf.testutils as tu
@@ -32,7 +37,7 @@ import base_test as bt
 import urllib3    # to suppress insecure warnings for localhost connections w/o certs
 import snappi     # snappi client
 import utils      # snappi utils installed under testlib/
-import dpkt, sys  # for packet capture etc.
+import dpkt       # for packet capture etc.
 
 # Ixia packets
 sys.path.append(os.path.join(os.path.dirname(__file__), '', 'scapy_contrib'))
@@ -67,12 +72,15 @@ def stats_expected(api, cfg, csv_dir=None):
     """
     Returns true if stats are as expected, False otherwise.
     """
-    port_results, flow_results = utils.get_all_stats(api, print_output=False)
+    req = api.metrics_request()
+    req.port.port_names = []
+    print('Fetching all port stats ...')
+    res = api.get_metrics(req)
+    port_results = res.port_metrics
+    if port_results is None:
+        port_results = []
     if csv_dir is not None:
-        utils.print_csv(csv_dir, port_results, flow_results)
-
-    if not all([f.transmit == 'stopped' for f in flow_results]):
-        return False # Fast fail if not even stopped yet
+        utils.print_csv(csv_dir, port_results, None)
 
     port_tx = sum([p.frames_tx for p in port_results if p.name == 'tx'])
     port_rx = sum([p.frames_rx for p in port_results if p.name == 'rx'])
@@ -90,20 +98,21 @@ def stats_settled(api, cfg, prev_stats):
         prev_stats - caller-allocated storage for previous stats sample; initialize
                      with {} prior to calling in wait_for() lambda loop
     """
-    port_results, flow_results = utils.get_all_stats(api, print_output=False)
+    port_results = api.get_metrics(api.metrics_request()).port_metrics
 
     if 'port' not in prev_stats:
         prev_stats['port'] = None
     prev_port_results = prev_stats['port']
-    if 'flow' not in prev_stats:
-        prev_stats['flow'] = None
-    prev_flow_results = prev_stats['flow']
+    # if 'flow' not in prev_stats:
+    #     prev_stats['flow'] = None
+    # prev_flow_results = prev_stats['flow']
     
-    result = all([f.transmit == 'stopped' for f in flow_results])
+    # result = all([f.transmit == 'stopped' for f in flow_results])
+    result = True
     if not result:
         print ("Waiting for flows to stop...")
     else:
-        if not (prev_port_results and prev_flow_results):
+        if not (prev_port_results):
             result = False # Need to get first results to have a "previous"
         else:
             # compare curr with prev
@@ -122,7 +131,7 @@ def stats_settled(api, cfg, prev_stats):
         
     # store in caller's "prev_stats" dict
     prev_stats['port'] = port_results
-    prev_stats['flow'] = flow_results
+    # prev_stats['flow'] = flow_results
     return result
 
 class Demo1TestBase(bt.P4RuntimeTest):
@@ -330,7 +339,7 @@ class SnappiFwdTestBase(Demo1Test):
     def setUp(self):
         Demo1Test.setUp(self)
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # Silence inecure warnings
-        self.api = snappi.api(host='https://localhost:8080')
+        self.api = snappi.api(ext='trex')
 
     def pkt_compare_func(self, exp_pkt, rx_pkt):
         """ Packet compare callback to filter certain fields"""
@@ -351,7 +360,7 @@ class SnappiFwdTestJson(SnappiFwdTestBase):
         # Note this method requires xternal JSON file be in sync with the P4 table programming values
         # and packet compare values defined below, which could be a maintenance burden
         self.cfg = utils.common.load_test_config(
-            self.api, 'demo1-snappi-packet-config.json', apply_settings=True
+            self.api, 'demo1-snappi-packet-config.json', apply_settings=False
         )
         res = self.api.set_config(self.cfg)
         assert api_results_ok(res), res
@@ -372,8 +381,8 @@ class SnappiFwdTestJson(SnappiFwdTestBase):
         SnappiPtfUtils.start_capture(self.api, [capture_port_name])
         SnappiPtfUtils.start_traffic(self.api)
         # Snappi flow-based test for dropped packets:
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         # Traditional PTF port-based test for dropped packets:
         assert(SnappiPtfUtils.verify_no_other_packets(self.api, [capture_port_name]))
         
@@ -385,8 +394,9 @@ class SnappiFwdTestJson(SnappiFwdTestBase):
                        self.act_set_bd_dmac_intf(bd, out_dmac, eg_port))
         self.table_add(self.key_send_frame(bd), self.act_rewrite_mac(out_smac))
 
-        exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
-                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
+        exp_pkt = ixia_tcp_packet_floating_instrum(_sig1=0, _sig2=0, _sig3=0,
+                                eth_src=out_smac, eth_dst=out_dmac, pktlen=96, ip_id=1,
+                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=8192, tcp_flags=2)
         # Force field updates (chksums, len, etc.)
         exp_pkt = Ether(exp_pkt.build())
 
@@ -409,9 +419,13 @@ class SnappiFwdTest(SnappiFwdTestBase):
         # Config method 2 - use inline snappi code to configure flows
         self.cfg = self.api.config()
         # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
-        port1, port2 = (
+        veth0, veth1, veth2, port1, veth4, port2 = (
             self.cfg.ports
+            .port(name='veth0')
+            .port(name='veth1')
+            .port(name='veth2')
             .port(name='port1', location='localhost:5555')
+            .port(name='veth4')
             .port(name='port2', location='localhost:5556')
         )
 
@@ -468,8 +482,8 @@ class SnappiFwdTest(SnappiFwdTestBase):
         SnappiPtfUtils.start_capture(self.api, [capture_port_name])
         SnappiPtfUtils.start_traffic(self.api)
         # Snappi flow-based test for dropped packets:
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         # Traditional PTF port-based test for dropped packets:
         assert(SnappiPtfUtils.verify_no_other_packets(self.api, [capture_port_name]))
         
@@ -490,8 +504,9 @@ class SnappiFwdTest(SnappiFwdTestBase):
                        self.act_set_bd_dmac_intf(bd, out_dmac, eg_port))
         self.table_add(self.key_send_frame(bd), self.act_rewrite_mac(out_smac))
 
-        exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
-                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
+        exp_pkt = ixia_tcp_packet_floating_instrum(_sig1=0, _sig2=0, _sig3=0,
+                                eth_src=out_smac, eth_dst=out_dmac, pktlen=96, ip_id=1,
+                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=8192, tcp_flags=2)
         # Force field updates (chksums, len, etc.)
         exp_pkt = Ether(exp_pkt.build())
 
@@ -519,7 +534,7 @@ class SnappiFwdTestJsonBidir(SnappiFwdTestBase):
         # Note this method requires xternal JSON file be in sync with the P4 table programming values
         # and packet compare values defined below, which could be a maintenance liability if they drift.
         self.cfg = utils.common.load_test_config(
-            self.api, 'demo1-snappi-packet-config-bidir.json', apply_settings=True
+            self.api, 'demo1-snappi-packet-config-bidir.json', apply_settings=False
         )
         res = self.api.set_config(self.cfg)
         assert api_results_ok(res), res
@@ -559,8 +574,9 @@ class SnappiFwdTestJsonBidir(SnappiFwdTestBase):
 
 
         # Forward direction - in port2, out port1
-        exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
-                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
+        exp_pkt = ixia_tcp_packet_floating_instrum(_sig1=0, _sig2=0, _sig3=0,
+                                eth_src=out_smac, eth_dst=out_dmac, pktlen=96, ip_id=1,
+                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=8192, tcp_flags=2)
         # Force field updates (chksums, len, etc.)
         exp_pkt = Ether(exp_pkt.build())
 
@@ -576,9 +592,10 @@ class SnappiFwdTestJsonBidir(SnappiFwdTestBase):
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, 'port2', self.pkt_compare_func)
 
         # Reverse direction - in port2, out port1
-        exp_pkt2 = ixia_tcp_packet_floating_instrum(eth_src=in_smac, eth_dst=in_dmac, pktlen=96,
-                                ip_src=ip_dst_addr, ip_dst=ip_src_addr, ip_ttl=63, tcp_window=0,
-                                tcp_sport=80, tcp_dport=1234)/Padding('\x00\x00\x00\x00')
+        exp_pkt2 = ixia_tcp_packet_floating_instrum(_sig1=0, _sig2=0, _sig3=0,
+                                eth_src=in_smac, eth_dst=in_dmac, pktlen=96, ip_id=1,
+                                ip_src=ip_dst_addr, ip_dst=ip_src_addr, ip_ttl=63, tcp_window=8192, tcp_flags=2,
+                                tcp_sport=80, tcp_dport=1234)
         # Force field updates (chksums, len, etc.)
         exp_pkt2 = Ether(exp_pkt2.build())
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt2, 'port1', self.pkt_compare_func)
@@ -592,9 +609,13 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         # Config method 2 - use inline snappi code to configure flows
         self.cfg = self.api.config()
         # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
-        port1, port2 = (
+        veth0, veth1, veth2, port1, veth4, port2 = (
             self.cfg.ports
+            .port(name='veth0')
+            .port(name='veth1')
+            .port(name='veth2')
             .port(name='port1', location='localhost:5555')
+            .port(name='veth4')
             .port(name='port2', location='localhost:5556')
         )
 
@@ -704,8 +725,9 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
 
 
         # Forward direction - in port2, out port1
-        exp_pkt = ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
-                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00')
+        exp_pkt = ixia_tcp_packet_floating_instrum(_sig1=0, _sig2=0, _sig3=0,
+                                eth_src=out_smac, eth_dst=out_dmac, pktlen=96, ip_id=1,
+                                ip_src=ip_src_addr, ip_dst=ip_dst_addr, ip_ttl=63, tcp_window=8192, tcp_flags=2)
         # Force field updates (chksums, len, etc.)
         exp_pkt = Ether(exp_pkt.build())
 
@@ -720,9 +742,10 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt, 'port2', self.pkt_compare_func)
 
         # Reverse direction - in port2, out port1
-        exp_pkt2 = ixia_tcp_packet_floating_instrum(eth_src=in_smac, eth_dst=in_dmac, pktlen=96,
-                                ip_src=ip_dst_addr, ip_dst=ip_src_addr, ip_ttl=63, tcp_window=0,
-                                tcp_sport=80, tcp_dport=1234)/Padding('\x00\x00\x00\x00')
+        exp_pkt2 = ixia_tcp_packet_floating_instrum(_sig1=0, _sig2=0, _sig3=0,
+                                eth_src=in_smac, eth_dst=in_dmac, pktlen=96, ip_id=1,
+                                ip_src=ip_dst_addr, ip_dst=ip_src_addr, ip_ttl=63, tcp_window=8192, tcp_flags=2,
+                                tcp_sport=80, tcp_dport=1234)
         # Force field updates (chksums, len, etc.)
         exp_pkt2 = Ether(exp_pkt2.build())
         SnappiPtfUtils.verify_capture_on_port(self.api, exp_pkt2, 'port1', self.pkt_compare_func)
@@ -744,9 +767,13 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         self.cfg = self.api.config()
         self.NUMPORTS=2
         # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
-        port1, port2 = (
+        veth0, veth1, veth2, port1, veth4, port2 = (
             self.cfg.ports
+            .port(name='veth0')
+            .port(name='veth1')
+            .port(name='veth2')
             .port(name='port1', location='localhost:5555')
+            .port(name='veth4')
             .port(name='port2', location='localhost:5556')
         )
 
@@ -842,10 +869,10 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         SnappiPtfUtils.start_traffic(self.api)
         sleep_dots(delay, "Wait for P4 pipeline to process all packets")
 
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
         # Snappi flow-based test for dropped packets:
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         # Traditional PTF port-based test for dropped packets:
         assert(SnappiPtfUtils.verify_no_other_packets(self.api, cap.port_names))
         
@@ -875,8 +902,9 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
 
 
         # Forward direction - in port2, out port1
-        exp_pkts = [ixia_tcp_packet_floating_instrum(eth_src=out_smac, eth_dst=out_dmac, pktlen=96,
-                                ip_src=ip_src_addr, ip_dst='10.1.0.%d' % i, ip_ttl=63, tcp_window=0)/Padding('\x00\x00\x00\x00') for i in range(self.compare_count)]
+        exp_pkts = [ixia_tcp_packet_floating_instrum(_sig1=0, _sig2=0, _sig3=0,
+                                eth_src=out_smac, eth_dst=out_dmac, pktlen=96, ip_id=1,
+                                ip_src=ip_src_addr, ip_dst='10.1.0.%d' % i, ip_ttl=63, tcp_window=8192, tcp_flags=2) for i in range(self.compare_count)]
         exp_pkts = [Ether(exp_pkts[i].build()) for i in range(len(exp_pkts))] # force recalc chksum, len,etc.
 
         print ("Send packet after configuring tables, verify captured packets byte-by-byte...")
@@ -890,16 +918,17 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
             interval_seconds=2, timeout_seconds=10
         )
 
-        utils.get_all_stats(self.api, print_output=True)
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        assert all([stat.frames_rx == self.tx_count/2 for stat in flow_results]), "Did not receive expected %d frames on all flows" % self.tx_count/2
+        # utils.get_all_stats(self.api, print_output=True)
+        # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        # assert all([stat.frames_rx == self.tx_count/2 for stat in flow_results]), "Did not receive expected %d frames on all flows" % self.tx_count/2
 
         SnappiPtfUtils.verify_captures_on_port(self.api, exp_pkts, 'port2', self.pkt_compare_func)
 
         # Reverse direction - in port2, out port1
-        exp_pkts2 = [Ether(ixia_tcp_packet_floating_instrum(eth_src=in_smac, eth_dst=in_dmac, pktlen=96,
-                                ip_src=ip_dst_addr, ip_dst='192.168.0.%d' % i, ip_ttl=63, tcp_window=0,
-                                tcp_sport=80, tcp_dport=1234)/Padding('\x00\x00\x00\x00')) for i in range(self.compare_count)]
+        exp_pkts2 = [Ether(ixia_tcp_packet_floating_instrum(_sig1=0, _sig2=0, _sig3=0,
+                                eth_src=in_smac, eth_dst=in_dmac, pktlen=96, ip_id=1,
+                                ip_src=ip_dst_addr, ip_dst='192.168.0.%d' % i, ip_ttl=63, tcp_window=8192, tcp_flags=2,
+                                tcp_sport=80, tcp_dport=1234)) for i in range(self.compare_count)]
         exp_pkts2 = [Ether(exp_pkts2[i].build()) for i in range(len(exp_pkts2))] # force recalc chksum, len,etc.
         
         SnappiPtfUtils.verify_captures_on_port(self.api, exp_pkts2, 'port1', self.pkt_compare_func)
@@ -923,7 +952,20 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
 
         self.cfg = self.api.config()
         # when using ixnetwork extension, port location is chassis-ip;card-id;port-id
-        ports = [self.cfg.ports.port(name='port%d' % (i+1), location='localhost:%d' % (5555+i))[-1] for i in self.port_ndxs] # One core per port/direction
+        veth0, veth1, veth2, port1, veth4, port2, veth6, port3, veth8, port4 = (
+            self.cfg.ports
+            .port(name='veth0')
+            .port(name='veth1')
+            .port(name='veth2')
+            .port(name='port1', location='localhost:5555')
+            .port(name='veth4')
+            .port(name='port2', location='localhost:5556')
+            .port(name='veth6')
+            .port(name='port3', location='localhost:5557')
+            .port(name='veth8')
+            .port(name='port4', location='localhost:5558')
+        )
+        ports = [port1, port2, port3, port4]
         # ports = [self.cfg.ports.port(name='port%d' % (i+1), location='localhost:%d;%d' % (5555,i+1) )[-1] for i in self.port_ndxs] # 1 core per direction, shared among ports
 
         # configure layer 1 properties
@@ -996,13 +1038,13 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         sleep_dots(delay, "Wait for P4 pipeline to process all packets")
 
         # Snappi flow-based test for dropped packets:
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
-        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         # Traditional PTF port-based test for dropped packets:
         assert(SnappiPtfUtils.verify_no_other_packets(self.api, cap.port_names))
 
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=False)
-        assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
+        # port_results, flow_results = utils.get_all_stats(self.api, print_output=False)
+        # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         
         # Add a set of table entries that the packet should match, and
         # be forwarded out with the desired dest and source MAC
@@ -1027,8 +1069,9 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
             interval_seconds=2, timeout_seconds=20
         )
         
-
-        port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
+        req = self.api.metrics_request()
+        req.port.port_names = ['port%d' % (i+1) for i in self.port_ndxs]
+        port_results = self.api.get_metrics(req).port_metrics
 
         print ("Verifying port & flow statistics...")
         # This form uses a compact list comprehension to perform test
@@ -1039,8 +1082,8 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         print (" - Verify tx & rx port stats are identical...")
         assert all([stat.frames_rx == stat.frames_tx for stat in port_results]), [msg for msg in self.test_mismmatched_port_tx_frames_rx(port_results, captures)]
 
-        print (" - Verify each Rx flow received %d packets..." % self.tx_count)
-        assert all([stat.frames_rx == self.tx_count for stat in flow_results]), "Flow stats Rx frames != self.tx_count" 
+        # print (" - Verify each Rx flow received %d packets..." % self.tx_count)
+        # assert all([stat.frames_rx == self.tx_count for stat in flow_results]), "Flow stats Rx frames != self.tx_count" 
 
         print ("Verifying captured packet contents...")
         captures = utils.get_all_captures(self.api, self.cfg)
