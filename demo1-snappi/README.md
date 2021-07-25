@@ -1,6 +1,6 @@
 # Preface
 This directory is an adaptation of [p4-guide/demo1](https://github.com/jafingerhut/p4-guide/tree/master/demo1) originally created by Andy Fingerhut. Specifically, the PTF directory contains a new test file [ptf/demo1-snappi.py](ptf/demo1-snappi.py) based on the original `demo1.py`.Instead of using [Scapy](https://scapy.readthedocs.io/en/latest/index.html) for sending and capturing packets, it has been modified to utilize 
-the [Ixia-c Software Traffic Generator](https://github.com/open-traffic-generator/ixia-c) via the [snappi Python client library](https://github.com/open-traffic-generator/snappi).
+Cisco's [T-Rex Traffic Generator](https://trex-tgn.cisco.com/) via the [snappi Python client library](https://github.com/open-traffic-generator/snappi).
 
 `snappi` is a Python client which uses the [Open Traffic Generator](https://github.com/open-traffic-generator) API. This REST API talks to a variety of software and hardware-based traffic generators/analyzers via a unified data model, allowing you to "write tests once and run anywhere" at speeds from "slow simulations" up to Tbps.
 
@@ -312,39 +312,25 @@ It will create a directory `p4-guide` where all of the subsequent activities wil
 ## Common Install Directions
 These are performed after completing either one of the OS options above.
 
-### Install Docker
-You'll need Docker to run Ixia-c.
-There are various ways to install Docker. Below is but one method. See [Docker.com](https://www.docker.com/get-started).
-```
-sudo apt update
-sudo apt install docker.io
-sudo usermod -aG docker <USERNAME> 
-sudo systemctl start docker
-sudo systemctl enable docker
-```
-**NOTE**: the `usermod` command above lets you avoid needing `sudo` for all `docker` commands. You may need to re-login, or in the case of a VM, restart the OS, in order for it to take effect. You can verify `docker` group membership via the `id` command.
-
-
-### Optional - Install Ixia-c docker images
-You can pull the images from the Docker repository before you run the PTF script. Otherwise, the script will automatically pull the Docker images the first time you run it.
-
-```
-docker pull ixiacom/ixia-c-controller:latest
-docker pull ixiacom/ixia-c-traffic-engine:latest
-```
 ### Install snappi Python libraries
 This install snappi and other libraries so `root` can access it in the PTF scripts (which have to run as `root`)
 ```
-sudo pip3 install snappi dpkt
+sudo pip3 install snappi==0.4.21 dpkt
 ```
 You can use `snappi` in other projects! Just add `import snappi` to your Python programs.
-### Optional - Install Ixia-c Documentation/Examples
+### Optional - Install snappi-trex Documentation/Examples
 `cd` to a suitable directory to install these resources for use outside this tutorial.
 ```
-git clone --recursive https://github.com/open-traffic-generator/ixia-c
+git clone --recursive https://github.com/open-traffic-generator/snappi-trex
 ```
 # Lets do the Demos!
 > **NOTE:** Unless otherwise mentioned, steps below take place in the current directory (the same one as contains this README), e.g. `p4-guide/demo1-snappi`.
+
+## Download and set up T-Rex v2.90
+Note: (This will uninstall scapy and install a custom version of scapy)
+```
+sudo ./trex_setup.sh
+```
 
 ## Compile P4 code
 ```
@@ -371,6 +357,13 @@ OR
 ```
 sudo simple_switch_grpc --log-file ss-log --log-flush -i 0@veth0 -i 1@veth2 -i 2@veth4 -i 3@veth6 -i 4@veth8 -i 5@veth10 -i 6@veth12 -i 7@veth14 --no-p4
 ```
+
+# Launch T-Rex in a new terminal window
+Note: (Ctrl+C to quit the program)
+```
+sudo ./run_trex.sh
+```
+
 ## Optional - Monitor traffic on veths
 In four separate console windows:
 ```
@@ -490,24 +483,15 @@ This test sends 12 flows in a full mesh between 4 ports and verfies the received
 sudo ./runptf.sh demo1-snappi.SnappiFwdTestBidirLpmRange
 ```
 
-## About Ixia header and Flow Instrumentation
-Ixia packet testers utilize a proprietary flow-tracking technique which involves inserting a special "instrumentation header" into the packet. It gets inserted after the last valid protocol header, i.e. it forms the first portion of "payload." This header, which is decribed in the [ptf/scapy_contrib/ixia_scapy.py](ptf/scapy_contrib/ixia_scapy.py) Scapy file, contains several interesting fields:
-* 12-byte fixed "signature" which serves as a marker to indicate start of header
-* 4-byte `PGID` or "port group ID" field; think of this as a flow ID
-* 32-bit sequence number which can be used to detect packet drops
-* 32-bit timestamp which can be used to measure latency or delay
-![Ixia-headers](ixia-headers.svg)
-
-This technique was originally pioneered to enable hardware-based testers to perform real-time analysis of line-rate traffic prior to economically-viable protocol parsing engines (like P4 ASICs). The same technique can be done in CPUs (Ixia-c) at lower speeds (approaching 100Gbps for larger packet sizes, limited by the packet-per-second rate).
-
 # snappi snippets
 Here we'd like to showcase some code snippets which typify some of the "idioms" of snappi.
 
 ## Get an api "handle"
 The handle is a client stub which connects to the Ixia-c Controller REST server.
 ```
-self.api = snappi.api(host='https://localhost:8080')
+self.api = snappi.api(location='https://localhost:8080')
 ```
+Note: older versions of snappi use `host` parameter instead of `location`
 ## Load a JSON config file
 The `config` object is used to manipulate Ixia-c configurations. You can create it a command at a time, or initialize it from a JSON file as shown below.
 ```

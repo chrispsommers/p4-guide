@@ -1,13 +1,11 @@
-# P4 PTF Demo Using snappi and Ixia-c SW Traffic Generator instead of Scapy!
+# P4 PTF Demo Using snappi and T-Rex SW Traffic Generator instead of Scapy!
 ## Preface
 This project is an adaptation (fork) of [p4-guide](https://github.com/jafingerhut/p4-guide/) originally created by Andy Fingerhut. It includes one new PTF test directory. Instead of using [Scapy](https://scapy.readthedocs.io/en/latest/index.html) for sending and capturing packets, it has been modified to utilize 
-the [Ixia-c Software Traffic Generator](https://github.com/open-traffic-generator/ixia-c) via the [snappi Python client library](https://github.com/open-traffic-generator/snappi).
+Cisco's [T-Rex Traffic Generator](https://trex-tgn.cisco.com/) via the [snappi Python client library](https://github.com/open-traffic-generator/snappi).
 
-Ixia-c is a modern, powerful and API driven traffic generator designed to cater to the needs of hyperscalers, network hardware vendors and hobbyists alike.
+T-Rex is a software traffic generator designed by Cisco that simulates real packet traffic across a network. T-Rex is fully configurable by the user. To learn more, visit the [T-Rex](https://trex-tgn.cisco.com) website. 
 
-![Ixia-c](ixia-c.drawio.svg)
-
-Ixia-c is available for free and is distributed / deployed as a multi-container application consisting of a controller, a traffic-engine and an app-usage-reporter.
+![Ixia-c](snappi-trex-design.svg)
 
 As a reference implementation of Open Traffic Generator API, Ixia-c supports client SDKs in various languages, most prevalent being [snappi](https://github.com/open-traffic-generator/snappi).
 <div align="center">
@@ -19,10 +17,10 @@ As a reference implementation of Open Traffic Generator API, Ixia-c supports cli
 [snappi](https://github.com/open-traffic-generator/snappi) is a Python client which uses the [Open Traffic Generator](https://github.com/open-traffic-generator) API. This REST API talks to a variety of software and hardware-based traffic generators/analyzers via a unified data model, allowing you to "write tests once and run anywhere" at speeds from "slow simulations" up to Tbps.
 
 The main differences between this repo and the original are the following additions:
-* [demo1-snappi/](demo1-snappi/README.md) directory with new PTF scripts to demonstrate PTF-snappi-Ixia-c integration. [Click HERE](demo1-snappi/README.md) to get started!
+* [demo1-snappi/](demo1-snappi/README.md) directory with new PTF scripts to demonstrate PTF-snappi-trex integration. [Click HERE](demo1-snappi/README.md) to get started!
 * [testlib/utils](testlib/utils) directory containing snappi utility scripts
 
-# [=> Go to the Snappi-Ixia-c Demo](demo1-snappi/README.md)
+# [=> Go to the Snappi-Trex Demo](demo1-snappi/README.md)
 
 # References
 * https://pypi.org/project/snappi/
