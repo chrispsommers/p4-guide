@@ -381,6 +381,10 @@ class SnappiFwdTestJson(SnappiFwdTestBase):
         SnappiPtfUtils.start_capture(self.api, [capture_port_name])
         SnappiPtfUtils.start_traffic(self.api)
         # Snappi flow-based test for dropped packets:
+        req = self.api.metrics_request()
+        req.port.port_names = ['port%d' % (i+1) for i in range(2)]
+        port_results = self.api.get_metrics(req).port_metrics
+        utils.print_stats(port_stats=port_results)
         # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
         # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         # Traditional PTF port-based test for dropped packets:
@@ -482,6 +486,10 @@ class SnappiFwdTest(SnappiFwdTestBase):
         SnappiPtfUtils.start_capture(self.api, [capture_port_name])
         SnappiPtfUtils.start_traffic(self.api)
         # Snappi flow-based test for dropped packets:
+        req = self.api.metrics_request()
+        req.port.port_names = ['port%d' % (i+1) for i in range(2)]
+        port_results = self.api.get_metrics(req).port_metrics
+        utils.print_stats(port_stats=port_results)
         # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
         # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         # Traditional PTF port-based test for dropped packets:
@@ -871,6 +879,10 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
 
         # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
         # Snappi flow-based test for dropped packets:
+        req = self.api.metrics_request()
+        req.port.port_names = ['port%d' % (i+1) for i in range(2)]
+        port_results = self.api.get_metrics(req).port_metrics
+        utils.print_stats(port_stats=port_results)
         # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
         # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         # Traditional PTF port-based test for dropped packets:
@@ -918,6 +930,10 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
             interval_seconds=2, timeout_seconds=10
         )
 
+        req = self.api.metrics_request()
+        req.port.port_names = ['port%d' % (i+1) for i in range(2)]
+        port_results = self.api.get_metrics(req).port_metrics
+        utils.print_stats(port_stats=port_results)
         # utils.get_all_stats(self.api, print_output=True)
         # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
         # assert all([stat.frames_rx == self.tx_count/2 for stat in flow_results]), "Did not receive expected %d frames on all flows" % self.tx_count/2
@@ -1038,6 +1054,10 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         sleep_dots(delay, "Wait for P4 pipeline to process all packets")
 
         # Snappi flow-based test for dropped packets:
+        req = self.api.metrics_request()
+        req.port.port_names = ['port%d' % (i+1) for i in self.port_ndxs]
+        port_results = self.api.get_metrics(req).port_metrics
+        utils.print_stats(port_stats=port_results)
         # port_results, flow_results = utils.get_all_stats(self.api, print_output=True)
         # assert all([stat.frames_rx == 0 for stat in flow_results]), "Received unexpected frames" 
         # Traditional PTF port-based test for dropped packets:
@@ -1072,6 +1092,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         req = self.api.metrics_request()
         req.port.port_names = ['port%d' % (i+1) for i in self.port_ndxs]
         port_results = self.api.get_metrics(req).port_metrics
+        utils.print_stats(port_stats=port_results)
 
         print ("Verifying port & flow statistics...")
         # This form uses a compact list comprehension to perform test
