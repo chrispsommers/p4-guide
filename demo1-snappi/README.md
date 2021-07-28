@@ -342,6 +342,7 @@ When finished running the PTF tests, you can restore scapy back to the original 
 ```
 sudo ./scapy_restore.sh
 ```
+Note: If the script fails, you may have to change the `SCAPYINSTALLPATH` variable to the install path of your installed scapy package
 
 ## Compile P4 code
 ```
