@@ -57,7 +57,7 @@ def sleep_dots(secs,msg):
     print
 
 def api_results_ok(results):
-    if results.errors == None or len(results.errors) == 0:
+    if hasattr(results, 'warnings'):
         return True
     else:
         print ("Results=%s" % results)
@@ -104,7 +104,7 @@ def stats_settled(api, cfg, prev_stats):
         print ("Waiting for flows to stop...")
     else:
         if not (prev_port_results and prev_flow_results):
-             result = False # Need to get first results to have a "previous"
+            result = False # Need to get first results to have a "previous"
         else:
             # compare curr with prev
             for stat in port_results:
@@ -435,6 +435,8 @@ class SnappiFwdTest(SnappiFwdTestBase):
         flow1.size.fixed = 100
         flow1.rate.percentage = 10
         flow1.duration.fixed_packets.packets = 1
+        # enable flow metrics
+        flow1.metrics.enable = True
         # configure protocol headers with defaults fields
         flow1.packet.ethernet().ipv4().tcp()
 
@@ -624,6 +626,8 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         flow1.size.fixed = 100
         flow1.rate.percentage = 10
         flow1.duration.fixed_packets.packets = 1
+        # enable flow metrics
+        flow1.metrics.enable = True
         # configure protocol headers with defaults fields
         flow1.packet.ethernet().ipv4().tcp()
 
@@ -649,6 +653,8 @@ class SnappiFwdTestBidir(SnappiFwdTestBase):
         flow2.size.fixed = 100
         flow2.rate.percentage = 10
         flow2.duration.fixed_packets.packets = 1
+        # enable flow metrics
+        flow2.metrics.enable = True
         # configure protocol headers with defaults fields
         flow2.packet.ethernet().ipv4().tcp()
 
@@ -779,6 +785,8 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         flow1.size.fixed = 100
         flow1.rate.pps = 100
         flow1.duration.fixed_packets.packets = self.tx_count
+        # enable flow metrics
+        flow1.metrics.enable = True
         # configure protocol headers with defaults fields
         flow1.packet.ethernet().ipv4().tcp()
 
@@ -805,6 +813,8 @@ class SnappiFwdTestBidirLpmRange(SnappiFwdTestBase):
         flow2.size.fixed = 100
         flow2.rate.pps = 100
         flow2.duration.fixed_packets.packets = self.tx_count
+        # enable flow metrics
+        flow2.metrics.enable = True
         # configure protocol headers with defaults fields
         flow2.packet.ethernet().ipv4().tcp()
 
@@ -951,6 +961,8 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
                 flow.size.fixed = 100
                 flow.rate.pps = 50
                 flow.duration.fixed_packets.packets = self.tx_count
+                # enable flow metrics
+                flow.metrics.enable = True
                 # configure protocol headers with defaults fields
                 flow.packet.ethernet().ipv4().tcp()
 

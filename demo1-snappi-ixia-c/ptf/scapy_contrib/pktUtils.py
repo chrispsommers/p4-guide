@@ -683,11 +683,15 @@ def compare_pkts2(pkt1, pkt2,
         if p2.haslayer(IXIA_FLOAT_INSTRUM):
             p2.getlayer(IXIA_FLOAT_INSTRUM).remove_payload()
 
-    
-    if str(p1) != str(p2):
-        print ("Layers: %s != %s " % (pkt_layers_str(p1), pkt_layers_str(p1)))
-        return False, "Mismatched", p1,p2
-    # else:
-    #     print ("Matched %s layers: %s == %s" % (l, str(p1),str(p2)))
+    exl=len(p1)
+    bex=bytes(p1)
+    rxl=len(p2)
+    brx=bytes(p2)
+    maxlen= rxl if rxl>exl else exl
+
+    for i in range(maxlen-4):
+        if bex[i] != brx[i]:
+            print ("Layers: %s != %s " % (pkt_layers_str(p1), pkt_layers_str(p1)))
+            return False, "Mismatched", p1,p2
 
     return True, "", p1,p2
