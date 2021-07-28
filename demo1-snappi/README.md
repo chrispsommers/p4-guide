@@ -332,6 +332,16 @@ Note: (This will uninstall scapy and install a custom version of scapy)
 sudo ./trex_setup.sh
 ```
 
+## Install T-Rex Scapy package
+The Packet Testing Framework runs with scapy imported. This conflicts with the T-Rex scapy library, so instead, you can manually install the T-Rex scapy package using the `scapy_replace.sh` script.
+```
+sudo ./scapy_replace.sh
+```
+When finished running the PTF tests, you can restore scapy back to the original version using
+```
+sudo ./scapy_restore.sh
+```
+
 ## Compile P4 code
 ```
 ./compile.sh
