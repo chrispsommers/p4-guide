@@ -314,8 +314,9 @@ These are performed after completing either one of the OS options above.
 
 ### Install snappi Python libraries
 This install snappi and other libraries so `root` can access it in the PTF scripts (which have to run as `root`)
+Note: Also works with snappi v0.4.0
 ```
-sudo pip3 install snappi==0.4.21 dpkt
+sudo pip3 install snappi==0.4.26 dpkt
 ```
 You can use `snappi` in other projects! Just add `import snappi` to your Python programs.
 ### Optional - Install snappi-trex Documentation/Examples
