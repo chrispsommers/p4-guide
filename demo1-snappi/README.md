@@ -335,7 +335,7 @@ docker pull ixiacom/ixia-c-traffic-engine:latest
 ### Install snappi Python libraries
 This install snappi and other libraries so `root` can access it in the PTF scripts (which have to run as `root`)
 ```
-sudo pip3 install snappi dpkt
+sudo pip3 install snappi==0.4.0 dpkt
 ```
 You can use `snappi` in other projects! Just add `import snappi` to your Python programs.
 ### Optional - Install Ixia-c Documentation/Examples
