@@ -4,7 +4,7 @@ Cisco's [T-Rex Traffic Generator](https://trex-tgn.cisco.com/) via the [snappi P
 
 `snappi` is a Python client which uses the [Open Traffic Generator](https://github.com/open-traffic-generator) API. This REST API talks to a variety of software and hardware-based traffic generators/analyzers via a unified data model, allowing you to "write tests once and run anywhere" at speeds from "slow simulations" up to Tbps.
 
-This project comprises a simple P4 "switch" program which performs LPM Lookup on IP destination address, and switches packets to the correct egress port while performing MAC address rewrite. A few test programs in the PTF framework demonstrate the ease and power of snappi and ixia-c as replacements for Scapy.
+This project comprises a simple P4 "switch" program which performs LPM Lookup on IP destination address, and switches packets to the correct egress port while performing MAC address rewrite. A few test programs in the PTF framework demonstrate the ease and power of snappi and T-Rex as replacements for Scapy.
 
 # References
 * https://github.com/open-traffic-generator
@@ -316,7 +316,7 @@ These are performed after completing either one of the OS options above.
 This install snappi and other libraries so `root` can access it in the PTF scripts (which have to run as `root`)
 Note: Also works with snappi v0.4.0
 ```
-sudo pip3 install snappi==0.4.26 dpkt
+sudo pip3 install snappi==0.4.26 snappi_trex dpkt
 ```
 You can use `snappi` in other projects! Just add `import snappi` to your Python programs.
 ### Optional - Install snappi-trex Documentation/Examples
@@ -431,7 +431,6 @@ This test is unique among all the tests because it uses a JSON configuration fil
 * Start traffic flow a second time and capture everything. We wait until the received packet counts match the expected values on all flows (or timeout waiting).
 * Verify the captured results has the correct number of packets for each flow.
 * Perform a byte-by-byte comparison of the received packets, against the expected packets. The expected packets are modified version of th esent packets, with MAC rewrite in accordance with the intended switch behavior. We ignore portions of the packet during compare as follows:
-  * The second half of the [Ixia "instrumentation" header](#about-ixia-header-and-flow-instrumentation) which follows the TCP header (since the contents vary)
   * The TCP checksum (due to the variable instrumentation contents)
   * The IP checksum (due to the variable instrumentation contents)
 </details>
@@ -463,13 +462,12 @@ This test sends bidirectional traffic between two switch ports, then verifies pa
 * Start traffic flow a second time and capture everything. We wait until the received packet counts match the expected values on all flows (or timeout waiting).
 * Verify the captured results has the correct number of packets for each flow.
 * Perform a byte-by-byte comparison of the received packets, against the expected packets. The expected packets are modified version of th esent packets, with MAC rewrite in accordance with the intended switch behavior. We ignore portions of the packet during compare as follows:
-  * The second half of the [Ixia "instrumentation" header](#about-ixia-header-and-flow-instrumentation) which follows the TCP header (since the contents vary)
   * The TCP checksum (due to the variable instrumentation contents)
   * The IP checksum (due to the variable instrumentation contents)
 </details>
 
 ## Run SnappiFwdTest4PortMesh PTF test
-This test sends 12 flows in a full mesh between 4 ports and verfies the received packet counts are correct. No detailed packet comparisons are performed; instead we rely upon flow-tracking statistics using the [Ixia "instrumentation" header](#about-ixia-header-and-flow-instrumentation). This is a very powerful built-in feature and is essentially the same magic which powers full-line-rate HW-based packet testers.
+This test sends 12 flows in a full mesh between 4 ports and verfies the received packet counts are correct. No detailed packet comparisons are performed.
 
 ![SnappiFwdTest4PortMesh](SnappiFwdTest4PortMesh.svg)
 

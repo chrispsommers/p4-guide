@@ -380,7 +380,7 @@ sudo tcpdump -eni veth6
 sudo tcpdump -eni veth8
 ```
 ## PTF Tests Overview
-
+Note: Ran using ixia-c-controller:0.0.1-1622 and ixia-c-traffic-engine:1.4.0.1
 ### How to Run
 
 The `runptf.sh` helper script, without further arguments, will run all tests. Use `sudo` to acquire root access. This script will launch the required Ixia-c containers, run the actual PTF script, then kill the containers.
