@@ -1086,7 +1086,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         self.prev_stats = {}
         utils.wait_for(
             lambda: stats_settled(self.api, self.cfg, self.prev_stats), 'stats to settle',
-            interval_seconds=2, timeout_seconds=20
+            interval_seconds=4, timeout_seconds=20
         )
         
         req = self.api.metrics_request()
@@ -1101,7 +1101,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
 
         # For fun, we'll use a generator method to compose the detailed error message
         print (" - Verify tx & rx port stats are identical...")
-        assert all([stat.frames_rx == stat.frames_tx for stat in port_results]), [msg for msg in self.test_mismmatched_port_tx_frames_rx(port_results, captures)]
+        assert all([stat.frames_rx == stat.frames_tx for stat in port_results]), [msg for msg in self.test_mismmatched_port_tx_frames_rx(port_results, None)]
 
         # print (" - Verify each Rx flow received %d packets..." % self.tx_count)
         # assert all([stat.frames_rx == self.tx_count for stat in flow_results]), "Flow stats Rx frames != self.tx_count" 
