@@ -1077,6 +1077,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
             self.table_add(self.key_mac_da(dst),
                         self.act_set_bd_dmac_intf(dst, host_macs[dst], dst+1)) # port index 0..3 => dataplane port 1..4
 
+        sleep_dots(3, "Allowing P4 tables to be programmed...")
 
         print ("Send packet after configuring tables, verify captured packets stats only...")
         SnappiPtfUtils.start_capture(self.api, cap.port_names)
@@ -1086,7 +1087,7 @@ class SnappiFwdTest4PortMesh(SnappiFwdTestBase):
         self.prev_stats = {}
         utils.wait_for(
             lambda: stats_settled(self.api, self.cfg, self.prev_stats), 'stats to settle',
-            interval_seconds=4, timeout_seconds=20
+            interval_seconds=2, timeout_seconds=20
         )
         
         req = self.api.metrics_request()
